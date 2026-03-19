@@ -31,7 +31,7 @@ const NODE_TYPES = [
   { type: "song", label: "Song", icon: Music, emoji: "🎵", color: "text-green-400 bg-green-400/10" },
   { type: "album", label: "Album", icon: Disc3, emoji: "💿", color: "text-purple-400 bg-purple-400/10" },
   { type: "playlist", label: "Playlist", icon: ListMusic, emoji: "📋", color: "text-blue-400 bg-blue-400/10" },
-  { type: "photo_album", label: "Photo Album", icon: Image, emoji: "📷", color: "text-pink-400 bg-pink-400/10" },
+  { type: "photo_album", label: "Photos", icon: Image, emoji: "📷", color: "text-pink-400 bg-pink-400/10" },
   { type: "video", label: "Video", icon: Video, emoji: "🎬", color: "text-red-400 bg-red-400/10" },
   { type: "link", label: "Link", icon: Link2, emoji: "🔗", color: "text-cyan-400 bg-cyan-400/10" },
   { type: "text", label: "Text", icon: FileText, emoji: "📝", color: "text-slate-400 bg-slate-400/10" },
@@ -121,7 +121,7 @@ export function AddNodeDialog({
         if (!v) resetForm();
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">
             {step === "type" ? "Add New Node" : `New ${NODE_TYPES.find((t) => t.type === selectedType)?.label}`}
@@ -137,13 +137,13 @@ export function AddNodeDialog({
         </DialogHeader>
 
         {step === "type" && (
-          <div className="grid grid-cols-4 gap-2 py-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 py-2">
             {NODE_TYPES.map((t) => (
               <button
                 key={t.type}
                 className={cn(
-                  "flex flex-col items-center gap-1.5 p-3 rounded-lg border border-border transition-colors",
-                  "hover:bg-muted/50 hover:border-primary/30",
+                  "flex flex-col items-center gap-2 p-4 md:p-3 rounded-lg border border-border transition-colors",
+                  "hover:bg-muted/50 hover:border-primary/30 active:bg-muted/70",
                   "focus:outline-none focus:ring-2 focus:ring-primary"
                 )}
                 onClick={() => {
@@ -152,10 +152,10 @@ export function AddNodeDialog({
                 }}
                 data-testid={`button-type-${t.type}`}
               >
-                <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", t.color)}>
-                  <t.icon className="h-5 w-5" />
+                <div className={cn("w-12 h-12 md:w-10 md:h-10 rounded-lg flex items-center justify-center", t.color)}>
+                  <t.icon className="h-6 w-6 md:h-5 md:w-5" />
                 </div>
-                <span className="text-xs">{t.label}</span>
+                <span className="text-sm md:text-xs font-medium">{t.label}</span>
               </button>
             ))}
           </div>
@@ -167,9 +167,9 @@ export function AddNodeDialog({
               variant="ghost"
               size="sm"
               onClick={() => setStep("type")}
-              className="text-xs -ml-2 text-muted-foreground"
+              className="text-xs -ml-2 text-muted-foreground h-9"
             >
-              <ChevronLeft className="h-3 w-3 mr-1" />
+              <ChevronLeft className="h-3.5 w-3.5 mr-1" />
               Back to type selection
             </Button>
 
@@ -180,20 +180,20 @@ export function AddNodeDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Enter title..."
-                className="bg-card"
+                className="bg-card text-base md:text-sm h-11 md:h-9"
                 autoFocus
               />
             </div>
 
             {selectedType === "song" && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Artist</Label>
                   <Input
                     data-testid="input-new-artist"
                     value={artistName}
                     onChange={(e) => setArtistName(e.target.value)}
-                    className="bg-card"
+                    className="bg-card text-base md:text-sm h-11 md:h-9"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -202,7 +202,7 @@ export function AddNodeDialog({
                     data-testid="input-new-album"
                     value={albumName}
                     onChange={(e) => setAlbumName(e.target.value)}
-                    className="bg-card"
+                    className="bg-card text-base md:text-sm h-11 md:h-9"
                   />
                 </div>
               </div>
@@ -215,7 +215,7 @@ export function AddNodeDialog({
                   data-testid="input-new-artist"
                   value={artistName}
                   onChange={(e) => setArtistName(e.target.value)}
-                  className="bg-card"
+                  className="bg-card text-base md:text-sm h-11 md:h-9"
                 />
               </div>
             )}
@@ -228,7 +228,7 @@ export function AddNodeDialog({
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                   placeholder="https://..."
-                  className="bg-card"
+                  className="bg-card text-base md:text-sm h-11 md:h-9"
                 />
               </div>
             )}
@@ -241,7 +241,7 @@ export function AddNodeDialog({
                   value={bodyText}
                   onChange={(e) => setBodyText(e.target.value)}
                   rows={4}
-                  className="bg-card resize-y"
+                  className="bg-card resize-y text-base md:text-sm"
                 />
               </div>
             )}
@@ -249,7 +249,8 @@ export function AddNodeDialog({
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 variant="secondary"
-                size="sm"
+                size="default"
+                className="h-10 md:h-8"
                 onClick={() => {
                   onOpenChange(false);
                   resetForm();
@@ -258,7 +259,8 @@ export function AddNodeDialog({
                 Cancel
               </Button>
               <Button
-                size="sm"
+                size="default"
+                className="h-10 md:h-8"
                 onClick={() => createMutation.mutate()}
                 disabled={!title.trim() || createMutation.isPending}
                 data-testid="button-create-node"

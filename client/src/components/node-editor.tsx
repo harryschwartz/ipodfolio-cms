@@ -211,12 +211,12 @@ export function NodeEditor({
   );
 
   return (
-    <ScrollArea className="flex-1">
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-2">
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <ScrollArea className="flex-1">
+        <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-5 md:space-y-6 pb-24 md:pb-6">
+          {/* Header */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge
                 className={cn(
                   "text-xs",
@@ -239,465 +239,476 @@ export function NodeEditor({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => updateMutation.mutate()}
-              disabled={updateMutation.isPending}
-              data-testid="button-save"
-            >
-              <Save className="h-3.5 w-3.5 mr-1" />
-              {updateMutation.isPending ? "Saving..." : "Save"}
-            </Button>
-
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="destructive" data-testid="button-delete">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete "{node.title}"?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will permanently delete this node and all its children.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => deleteMutation.mutate()}
-                    data-testid="button-confirm-delete"
-                  >
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+          {/* Title */}
+          <div className="space-y-1.5">
+            <Label htmlFor="title" className="text-xs text-muted-foreground">
+              Title
+            </Label>
+            <Input
+              id="title"
+              data-testid="input-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isReadOnly}
+              className="bg-card text-base md:text-sm h-11 md:h-9"
+            />
           </div>
-        </div>
 
-        {/* Title */}
-        <div className="space-y-1.5">
-          <Label htmlFor="title" className="text-xs text-muted-foreground">
-            Title
-          </Label>
-          <Input
-            id="title"
-            data-testid="input-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={isReadOnly}
-            className="bg-card"
-          />
-        </div>
+          {isReadOnly && (
+            <p className="text-xs text-muted-foreground italic">
+              This is a system node with read-only properties.
+            </p>
+          )}
 
-        {isReadOnly && (
-          <p className="text-xs text-muted-foreground italic">
-            This is a system node with read-only properties.
-          </p>
-        )}
+          {/* Type-specific fields */}
+          {!isReadOnly && (
+            <>
+              <Separator />
 
-        {/* Type-specific fields */}
-        {!isReadOnly && (
-          <>
-            <Separator />
+              {/* Song fields */}
+              {node.type === "song" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Artist</Label>
+                      <Input
+                        data-testid="input-artist"
+                        value={artistName}
+                        onChange={(e) => setArtistName(e.target.value)}
+                        className="bg-card text-base md:text-sm h-11 md:h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Album</Label>
+                      <Input
+                        data-testid="input-album"
+                        value={albumName}
+                        onChange={(e) => setAlbumName(e.target.value)}
+                        className="bg-card text-base md:text-sm h-11 md:h-9"
+                      />
+                    </div>
+                  </div>
 
-            {/* Song fields */}
-            {node.type === "song" && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Duration (seconds)</Label>
+                    <Input
+                      data-testid="input-duration"
+                      type="number"
+                      value={duration}
+                      onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
+                      className="bg-card w-32 text-base md:text-sm h-11 md:h-9"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Cover Image</Label>
+                    <ImageUploader
+                      value={coverImageUrl}
+                      onChange={setCoverImageUrl}
+                      onUpload={(file) => handleImageUpload(file, setCoverImageUrl)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Audio</Label>
+                    {audioUrl ? (
+                      <div className="space-y-2">
+                        <audio controls src={audioUrl} className="w-full h-10" />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setAudioUrl("")}
+                          data-testid="button-remove-audio"
+                          className="h-9"
+                        >
+                          Remove Audio
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              accept="audio/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleAudioUpload(file);
+                              }}
+                            />
+                            <Button variant="secondary" size="sm" asChild>
+                              <span data-testid="button-upload-audio" className="h-9 px-4">
+                                <Upload className="h-4 w-4 mr-1.5" />
+                                Upload File
+                              </span>
+                            </Button>
+                          </label>
+                        </div>
+                        <AudioRecorder
+                          onRecordingComplete={(blob) => {
+                            const file = new File([blob], "recording.webm", {
+                              type: blob.type,
+                            });
+                            handleAudioUpload(file);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Album fields */}
+              {node.type === "album" && (
+                <div className="space-y-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Artist</Label>
                     <Input
                       data-testid="input-artist"
                       value={artistName}
                       onChange={(e) => setArtistName(e.target.value)}
-                      className="bg-card"
+                      className="bg-card text-base md:text-sm h-11 md:h-9"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Album</Label>
-                    <Input
-                      data-testid="input-album"
-                      value={albumName}
-                      onChange={(e) => setAlbumName(e.target.value)}
-                      className="bg-card"
+                    <Label className="text-xs text-muted-foreground">Cover Image</Label>
+                    <ImageUploader
+                      value={coverImageUrl}
+                      onChange={setCoverImageUrl}
+                      onUpload={(file) => handleImageUpload(file, setCoverImageUrl)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Children</Label>
+                    <div className="space-y-1 rounded-md border border-border bg-card p-2">
+                      {allNodes
+                        .filter((n) => n.parentId === node.id)
+                        .sort((a, b) => a.sortOrder - b.sortOrder)
+                        .map((child) => (
+                          <div
+                            key={child.id}
+                            className="flex items-center gap-2 text-sm md:text-xs p-2 md:p-1 hover:bg-muted/50 active:bg-muted/70 rounded cursor-pointer"
+                            onClick={() => onSelectNode(child.id)}
+                          >
+                            <span className="text-muted-foreground">{child.sortOrder + 1}.</span>
+                            <span>{child.title}</span>
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
+                              {child.type}
+                            </Badge>
+                          </div>
+                        ))}
+                      {allNodes.filter((n) => n.parentId === node.id).length === 0 && (
+                        <p className="text-xs text-muted-foreground italic p-1">No children</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Playlist fields */}
+              {node.type === "playlist" && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Cover Image</Label>
+                    <ImageUploader
+                      value={coverImageUrl}
+                      onChange={setCoverImageUrl}
+                      onUpload={(file) => handleImageUpload(file, setCoverImageUrl)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Songs</Label>
+                    <div className="space-y-1 rounded-md border border-border bg-card p-2">
+                      {allNodes
+                        .filter((n) => n.type === "song")
+                        .map((song) => (
+                          <div key={song.id} className="flex items-center gap-2 text-sm md:text-xs p-2 md:p-1">
+                            <Music className="h-4 w-4 md:h-3 md:w-3 text-green-400" />
+                            <span>{song.title}</span>
+                            <span className="text-muted-foreground">
+                              — {song.metadata?.artistName}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Folder fields */}
+              {node.type === "folder" && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Preview Image</Label>
+                    <ImageUploader
+                      value={previewImage}
+                      onChange={setPreviewImage}
+                      onUpload={(file) => handleImageUpload(file, setPreviewImage)}
                     />
                   </div>
                 </div>
+              )}
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Duration (seconds)</Label>
-                  <Input
-                    data-testid="input-duration"
-                    type="number"
-                    value={duration}
-                    onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
-                    className="bg-card w-32"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Cover Image</Label>
-                  <ImageUploader
-                    value={coverImageUrl}
-                    onChange={setCoverImageUrl}
-                    onUpload={(file) => handleImageUpload(file, setCoverImageUrl)}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Audio</Label>
-                  {audioUrl ? (
+              {/* Photo Album fields */}
+              {node.type === "photo_album" && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Photos</Label>
                     <div className="space-y-2">
-                      <audio controls src={audioUrl} className="w-full h-8" />
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setAudioUrl("")}
-                        data-testid="button-remove-audio"
-                      >
-                        Remove Audio
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <label className="cursor-pointer">
-                          <input
-                            type="file"
-                            accept="audio/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleAudioUpload(file);
-                            }}
-                          />
-                          <Button variant="secondary" size="sm" asChild>
-                            <span data-testid="button-upload-audio">
-                              <Upload className="h-3.5 w-3.5 mr-1" />
-                              Upload File
-                            </span>
-                          </Button>
-                        </label>
-                      </div>
-                      <AudioRecorder
-                        onRecordingComplete={(blob) => {
-                          const file = new File([blob], "recording.webm", {
-                            type: blob.type,
-                          });
-                          handleAudioUpload(file);
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Album fields */}
-            {node.type === "album" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Artist</Label>
-                  <Input
-                    data-testid="input-artist"
-                    value={artistName}
-                    onChange={(e) => setArtistName(e.target.value)}
-                    className="bg-card"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Cover Image</Label>
-                  <ImageUploader
-                    value={coverImageUrl}
-                    onChange={setCoverImageUrl}
-                    onUpload={(file) => handleImageUpload(file, setCoverImageUrl)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Children</Label>
-                  <div className="space-y-1 rounded-md border border-border bg-card p-2">
-                    {allNodes
-                      .filter((n) => n.parentId === node.id)
-                      .sort((a, b) => a.sortOrder - b.sortOrder)
-                      .map((child) => (
+                      {photos.map((photo, i) => (
                         <div
-                          key={child.id}
-                          className="flex items-center gap-2 text-xs p-1 hover:bg-muted/50 rounded cursor-pointer"
-                          onClick={() => onSelectNode(child.id)}
+                          key={i}
+                          className="flex items-start gap-2 p-2 rounded-md border border-border bg-card"
                         >
-                          <span className="text-muted-foreground">{child.sortOrder + 1}.</span>
-                          <span>{child.title}</span>
-                          <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                            {child.type}
-                          </Badge>
-                        </div>
-                      ))}
-                    {allNodes.filter((n) => n.parentId === node.id).length === 0 && (
-                      <p className="text-xs text-muted-foreground italic p-1">No children</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Playlist fields */}
-            {node.type === "playlist" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Cover Image</Label>
-                  <ImageUploader
-                    value={coverImageUrl}
-                    onChange={setCoverImageUrl}
-                    onUpload={(file) => handleImageUpload(file, setCoverImageUrl)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Songs</Label>
-                  <div className="space-y-1 rounded-md border border-border bg-card p-2">
-                    {allNodes
-                      .filter((n) => n.type === "song")
-                      .map((song) => (
-                        <div key={song.id} className="flex items-center gap-2 text-xs p-1">
-                          <Music className="h-3 w-3 text-green-400" />
-                          <span>{song.title}</span>
-                          <span className="text-muted-foreground">
-                            — {song.metadata?.artistName}
-                          </span>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Folder fields */}
-            {node.type === "folder" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Preview Image</Label>
-                  <ImageUploader
-                    value={previewImage}
-                    onChange={setPreviewImage}
-                    onUpload={(file) => handleImageUpload(file, setPreviewImage)}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Photo Album fields */}
-            {node.type === "photo_album" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Photos</Label>
-                  <div className="space-y-2">
-                    {photos.map((photo, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-2 p-2 rounded-md border border-border bg-card"
-                      >
-                        <div className="w-16 h-16 bg-muted rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
-                          {photo.url ? (
-                            <img
-                              src={photo.url}
-                              alt={photo.caption || ""}
-                              className="w-full h-full object-cover"
+                          <div className="w-16 h-16 bg-muted rounded flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {photo.url ? (
+                              <img
+                                src={photo.url}
+                                alt={photo.caption || ""}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Image className="h-6 w-6 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <Input
+                              placeholder="Caption"
+                              value={photo.caption || ""}
+                              onChange={(e) => {
+                                const updated = [...photos];
+                                updated[i] = { ...updated[i], caption: e.target.value };
+                                setPhotos(updated);
+                              }}
+                              className="bg-background text-sm md:text-xs h-9 md:h-7"
                             />
-                          ) : (
-                            <Image className="h-6 w-6 text-muted-foreground" />
-                          )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 w-9 md:h-7 md:w-7 p-0"
+                            onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                          >
+                            <X className="h-4 w-4 md:h-3 md:w-3" />
+                          </Button>
                         </div>
-                        <div className="flex-1 space-y-1">
-                          <Input
-                            placeholder="Caption"
-                            value={photo.caption || ""}
-                            onChange={(e) => {
-                              const updated = [...photos];
-                              updated[i] = { ...updated[i], caption: e.target.value };
-                              setPhotos(updated);
-                            }}
-                            className="bg-background text-xs h-7"
-                          />
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
-                        >
-                          <X className="h-3 w-3" />
+                      ))}
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files) return;
+                            for (const file of Array.from(files)) {
+                              const formData = new FormData();
+                              formData.append("file", file);
+                              const res = await fetch(
+                                `${"__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__"}/api/upload/image`,
+                                { method: "POST", body: formData }
+                              );
+                              const data = await res.json();
+                              setPhotos((prev) => [
+                                ...prev,
+                                { url: data.url, caption: "", sortOrder: prev.length },
+                              ]);
+                            }
+                          }}
+                        />
+                        <Button variant="secondary" size="sm" asChild>
+                          <span data-testid="button-add-photos" className="h-9 px-4">
+                            <Plus className="h-4 w-4 mr-1.5" />
+                            Add Photos
+                          </span>
                         </Button>
-                      </div>
-                    ))}
-                    <label className="cursor-pointer">
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Video fields */}
+              {node.type === "video" && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Video URL or Upload</Label>
+                    <Input
+                      data-testid="input-video-url"
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="bg-card text-base md:text-sm h-11 md:h-9"
+                    />
+                    <label className="cursor-pointer inline-block">
                       <input
                         type="file"
-                        accept="image/*"
-                        multiple
+                        accept="video/*"
                         className="hidden"
-                        onChange={async (e) => {
-                          const files = e.target.files;
-                          if (!files) return;
-                          for (const file of Array.from(files)) {
-                            const formData = new FormData();
-                            formData.append("file", file);
-                            const res = await fetch(
-                              `${"__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__"}/api/upload/image`,
-                              { method: "POST", body: formData }
-                            );
-                            const data = await res.json();
-                            setPhotos((prev) => [
-                              ...prev,
-                              { url: data.url, caption: "", sortOrder: prev.length },
-                            ]);
-                          }
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleVideoUpload(file);
                         }}
                       />
                       <Button variant="secondary" size="sm" asChild>
-                        <span data-testid="button-add-photos">
-                          <Plus className="h-3.5 w-3.5 mr-1" />
-                          Add Photos
+                        <span data-testid="button-upload-video" className="h-9 px-4">
+                          <Upload className="h-4 w-4 mr-1.5" />
+                          Upload Video
                         </span>
                       </Button>
                     </label>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Video fields */}
-            {node.type === "video" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Video URL or Upload</Label>
-                  <Input
-                    data-testid="input-video-url"
-                    value={videoUrl}
-                    onChange={(e) => setVideoUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="bg-card"
-                  />
-                  <label className="cursor-pointer inline-block">
-                    <input
-                      type="file"
-                      accept="video/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleVideoUpload(file);
-                      }}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Thumbnail</Label>
+                    <ImageUploader
+                      value={videoThumbnailUrl}
+                      onChange={setVideoThumbnailUrl}
+                      onUpload={(file) => handleImageUpload(file, setVideoThumbnailUrl)}
                     />
-                    <Button variant="secondary" size="sm" asChild>
-                      <span data-testid="button-upload-video">
-                        <Upload className="h-3.5 w-3.5 mr-1" />
-                        Upload Video
-                      </span>
-                    </Button>
-                  </label>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Thumbnail</Label>
-                  <ImageUploader
-                    value={videoThumbnailUrl}
-                    onChange={setVideoThumbnailUrl}
-                    onUpload={(file) => handleImageUpload(file, setVideoThumbnailUrl)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Duration (seconds)</Label>
-                  <Input
-                    type="number"
-                    value={duration}
-                    onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
-                    className="bg-card w-32"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Link fields */}
-            {node.type === "link" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">URL</Label>
-                  <Input
-                    data-testid="input-link-url"
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="bg-card"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Text fields */}
-            {node.type === "text" && (
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Body Text</Label>
-                  <Textarea
-                    data-testid="input-body-text"
-                    value={bodyText}
-                    onChange={(e) => setBodyText(e.target.value)}
-                    rows={6}
-                    className="bg-card resize-y"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Links</Label>
-                  <div className="space-y-2">
-                    {links.map((link, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <Input
-                          value={link.label}
-                          onChange={(e) => {
-                            const updated = [...links];
-                            updated[i] = { ...updated[i], label: e.target.value };
-                            setLinks(updated);
-                          }}
-                          placeholder="Label"
-                          className="bg-card text-xs flex-1"
-                        />
-                        <Input
-                          value={link.url}
-                          onChange={(e) => {
-                            const updated = [...links];
-                            updated[i] = { ...updated[i], url: e.target.value };
-                            setLinks(updated);
-                          }}
-                          placeholder="URL"
-                          className="bg-card text-xs flex-1"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => setLinks(links.filter((_, j) => j !== i))}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setLinks([...links, { label: "", url: "" }])}
-                      data-testid="button-add-link"
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-1" />
-                      Add Link
-                    </Button>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Duration (seconds)</Label>
+                    <Input
+                      type="number"
+                      value={duration}
+                      onChange={(e) => setDuration(parseInt(e.target.value) || 0)}
+                      className="bg-card w-32 text-base md:text-sm h-11 md:h-9"
+                    />
                   </div>
                 </div>
-              </div>
-            )}
-          </>
-        )}
+              )}
+
+              {/* Link fields */}
+              {node.type === "link" && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">URL</Label>
+                    <Input
+                      data-testid="input-link-url"
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="bg-card text-base md:text-sm h-11 md:h-9"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Text fields */}
+              {node.type === "text" && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Body Text</Label>
+                    <Textarea
+                      data-testid="input-body-text"
+                      value={bodyText}
+                      onChange={(e) => setBodyText(e.target.value)}
+                      rows={6}
+                      className="bg-card resize-y text-base md:text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Links</Label>
+                    <div className="space-y-2">
+                      {links.map((link, i) => (
+                        <div key={i} className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
+                          <Input
+                            value={link.label}
+                            onChange={(e) => {
+                              const updated = [...links];
+                              updated[i] = { ...updated[i], label: e.target.value };
+                              setLinks(updated);
+                            }}
+                            placeholder="Label"
+                            className="bg-card text-sm flex-1 h-10 md:h-8"
+                          />
+                          <Input
+                            value={link.url}
+                            onChange={(e) => {
+                              const updated = [...links];
+                              updated[i] = { ...updated[i], url: e.target.value };
+                              setLinks(updated);
+                            }}
+                            placeholder="URL"
+                            className="bg-card text-sm flex-1 h-10 md:h-8"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 w-9 md:h-7 md:w-7 p-0 self-end md:self-auto"
+                            onClick={() => setLinks(links.filter((_, j) => j !== i))}
+                          >
+                            <X className="h-4 w-4 md:h-3 md:w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setLinks([...links, { label: "", url: "" }])}
+                        data-testid="button-add-link"
+                        className="h-9"
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Add Link
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Sticky bottom action bar */}
+      <div className="shrink-0 border-t border-border bg-sidebar/95 backdrop-blur-sm px-4 py-3 md:py-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button
+            size="default"
+            onClick={() => updateMutation.mutate()}
+            disabled={updateMutation.isPending}
+            data-testid="button-save"
+            className="h-10 md:h-8 px-5 md:px-3 text-sm md:text-xs"
+          >
+            <Save className="h-4 w-4 md:h-3.5 md:w-3.5 mr-1.5 md:mr-1" />
+            {updateMutation.isPending ? "Saving..." : "Save"}
+          </Button>
+        </div>
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              size="default"
+              variant="destructive"
+              data-testid="button-delete"
+              className="h-10 md:h-8 w-10 md:w-8 p-0"
+            >
+              <Trash2 className="h-4 w-4 md:h-3.5 md:w-3.5" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete "{node.title}"?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete this node and all its children.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteMutation.mutate()}
+                data-testid="button-confirm-delete"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -718,10 +729,10 @@ function ImageUploader({
           <Button
             variant="destructive"
             size="sm"
-            className="absolute top-1 right-1 h-5 w-5 p-0"
+            className="absolute top-1 right-1 h-7 w-7 md:h-5 md:w-5 p-0"
             onClick={() => onChange("")}
           >
-            <X className="h-3 w-3" />
+            <X className="h-4 w-4 md:h-3 md:w-3" />
           </Button>
         </div>
       )}
@@ -736,9 +747,9 @@ function ImageUploader({
               if (file) onUpload(file);
             }}
           />
-          <div className="w-32 h-32 rounded-md border border-dashed border-border bg-card flex flex-col items-center justify-center gap-1 hover:bg-muted/50 transition-colors">
+          <div className="w-32 h-32 rounded-md border border-dashed border-border bg-card flex flex-col items-center justify-center gap-1 hover:bg-muted/50 active:bg-muted/70 transition-colors">
             <Upload className="h-5 w-5 text-muted-foreground" />
-            <span className="text-[10px] text-muted-foreground">Upload</span>
+            <span className="text-xs text-muted-foreground">Upload</span>
           </div>
         </label>
       )}

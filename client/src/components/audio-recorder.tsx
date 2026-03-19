@@ -180,29 +180,29 @@ export function AudioRecorder({
       )}
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex items-center justify-center gap-2 flex-wrap">
         {state === "idle" && (
           <Button
-            size="sm"
+            size="default"
             variant="default"
             onClick={startRecording}
             data-testid="button-start-recording"
-            className="gap-1"
+            className="gap-1.5 h-10 md:h-8 px-4 md:px-3"
           >
-            <Mic className="h-3.5 w-3.5" />
+            <Mic className="h-4 w-4 md:h-3.5 md:w-3.5" />
             Record
           </Button>
         )}
 
         {state === "recording" && (
           <Button
-            size="sm"
+            size="default"
             variant="destructive"
             onClick={stopRecording}
             data-testid="button-stop-recording"
-            className="gap-1"
+            className="gap-1.5 h-10 md:h-8 px-4 md:px-3"
           >
-            <Square className="h-3 w-3" />
+            <Square className="h-4 w-4 md:h-3 md:w-3" />
             Stop
           </Button>
         )}
@@ -210,30 +210,31 @@ export function AudioRecorder({
         {state === "recorded" && (
           <>
             <Button
-              size="sm"
+              size="default"
               variant="secondary"
               onClick={playRecording}
               data-testid="button-play-recording"
-              className="gap-1"
+              className="gap-1.5 h-10 md:h-8 px-4 md:px-3"
             >
-              <Play className="h-3 w-3" />
+              <Play className="h-4 w-4 md:h-3 md:w-3" />
               Play
             </Button>
             <Button
-              size="sm"
+              size="default"
               variant="secondary"
               onClick={reRecord}
               data-testid="button-re-record"
-              className="gap-1"
+              className="gap-1.5 h-10 md:h-8 px-4 md:px-3"
             >
-              <RotateCcw className="h-3 w-3" />
+              <RotateCcw className="h-4 w-4 md:h-3 md:w-3" />
               Re-record
             </Button>
             <Button
-              size="sm"
+              size="default"
               variant="default"
               onClick={saveRecording}
               data-testid="button-save-recording"
+              className="h-10 md:h-8 px-4 md:px-3"
             >
               Save
             </Button>
@@ -242,13 +243,13 @@ export function AudioRecorder({
 
         {state === "playing" && (
           <Button
-            size="sm"
+            size="default"
             variant="secondary"
             onClick={stopPlayback}
             data-testid="button-stop-playback"
-            className="gap-1"
+            className="gap-1.5 h-10 md:h-8 px-4 md:px-3"
           >
-            <Pause className="h-3 w-3" />
+            <Pause className="h-4 w-4 md:h-3 md:w-3" />
             Pause
           </Button>
         )}
