@@ -108,14 +108,24 @@ export default function Dashboard() {
               <h1 className="text-sm font-bold text-white">iPodfolio CMS</h1>
             </div>
           )}
-          <button
-            onClick={() => window.open("https://ipodfolio.vercel.app", "_blank")}
-            data-testid="button-preview-ipod"
-            className="flex items-center gap-1.5 text-xs text-white/80 hover:text-white bg-white/15 rounded-full px-3 py-1.5 transition-all"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Preview
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="button-add-root-node"
+              onClick={() => handleAddNode(null)}
+              className="w-8 h-8 rounded-full bg-white text-indigo-600 hover:bg-white/90 flex items-center justify-center shadow-md transition-all active:scale-95"
+              aria-label="New Collection"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => window.open("https://ipodfolio.vercel.app", "_blank")}
+              data-testid="button-preview-ipod"
+              className="flex items-center gap-1.5 text-xs text-white/80 hover:text-white bg-white/15 rounded-full px-3 py-1.5 transition-all"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Preview
+            </button>
+          </div>
         </header>
 
         {mobileView === "tree" ? (
@@ -136,12 +146,6 @@ export default function Dashboard() {
                 />
               )}
             </ScrollArea>
-            <div className="p-3 border-t border-border bg-white/80 backdrop-blur-sm shrink-0">
-              <Button size="default" className="w-full gap-2" data-testid="button-add-root-node" onClick={() => handleAddNode(null)}>
-                <Plus className="h-4 w-4" />
-                New Root Item
-              </Button>
-            </div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
@@ -175,6 +179,18 @@ export default function Dashboard() {
       <aside className="w-[288px] min-w-[288px] border-r border-border bg-sidebar flex flex-col shadow-lg">
         <SidebarHeader onPreview={() => window.open("https://ipodfolio.vercel.app", "_blank")} />
 
+        {/* Add Collection Button */}
+        <div className="px-3 pt-3 pb-1 shrink-0">
+          <Button
+            data-testid="button-add-root-node"
+            onClick={() => handleAddNode(null)}
+            className="w-full gap-2 h-9 text-sm font-semibold bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white border-0 shadow-sm hover:shadow-md transition-all"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Collection
+          </Button>
+        </div>
+
         {/* Content Tree */}
         <ScrollArea className="flex-1">
           {isLoading ? (
@@ -194,20 +210,6 @@ export default function Dashboard() {
             </div>
           )}
         </ScrollArea>
-
-        {/* Sidebar Footer */}
-        <div className="p-3 border-t border-border bg-sidebar">
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2 h-9 text-sm font-medium"
-            data-testid="button-add-root-node"
-            onClick={() => handleAddNode(null)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Root Item
-          </Button>
-        </div>
       </aside>
 
       {/* Main Area */}
