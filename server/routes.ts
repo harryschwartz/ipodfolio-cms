@@ -9,6 +9,61 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // ─── PUBLIC API (CORS-enabled, read-only) ───
+  // Returns published nodes for the iPodfolio frontend to consume
+  app.get("/api/public/nodes", async (_req, res) => {
+    res.set({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Cache-Control": "no-cache",
+    });
+    const allNodes = await storage.getAllNodes();
+    // Only return published nodes, mapped to the shape the iPodfolio site expects
+    const published = allNodes
+      .filter((n) => n.status === "published")
+      .map((n) => ({
+        id: n.id,
+        parentId: n.parentId,
+        type: n.type,
+        title: n.title,
+        sortOrder: n.sortOrder,
+        metadata: n.metadata
+          ? {
+              coverImage: n.metadata.coverImageUrl || undefined,
+              coverImageUrl: n.metadata.coverImageUrl || undefined,
+              artistName: n.metadata.artistName || undefined,
+              albumName: n.metadata.albumName || undefined,
+              audioUrl: n.metadata.audioUrl || undefined,
+              videoUrl: n.metadata.videoUrl || undefined,
+              thumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+              videoThumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+              linkUrl: n.metadata.linkUrl || undefined,
+              url: n.metadata.linkUrl || undefined,
+              duration: n.metadata.duration || undefined,
+              bodyText: n.metadata.bodyText || undefined,
+              previewImage: n.metadata.previewImage || undefined,
+              photos: n.metadata.photos || undefined,
+              links: n.metadata.links || undefined,
+              songIds: n.metadata.songIds || undefined,
+              coverImages: n.metadata.coverImages || undefined,
+            }
+          : {},
+      }));
+    res.json(published);
+  });
+
+  // Handle CORS preflight for public API
+  app.options("/api/public/nodes", (_req, res) => {
+    res.set({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    });
+    res.sendStatus(204);
+  });
+
+  // ─── ADMIN API (internal CMS use) ───
   // Get all nodes (flat list with metadata)
   app.get("/api/nodes", async (_req, res) => {
     const nodes = await storage.getAllNodes();
