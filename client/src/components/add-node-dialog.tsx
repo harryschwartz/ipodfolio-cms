@@ -27,14 +27,86 @@ import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
 const NODE_TYPES = [
-  { type: "folder", label: "Folder", icon: Folder, emoji: "📁", color: "text-amber-400 bg-amber-400/10" },
-  { type: "song", label: "Song", icon: Music, emoji: "🎵", color: "text-green-400 bg-green-400/10" },
-  { type: "album", label: "Album", icon: Disc3, emoji: "💿", color: "text-purple-400 bg-purple-400/10" },
-  { type: "playlist", label: "Playlist", icon: ListMusic, emoji: "📋", color: "text-blue-400 bg-blue-400/10" },
-  { type: "photo_album", label: "Photos", icon: Image, emoji: "📷", color: "text-pink-400 bg-pink-400/10" },
-  { type: "video", label: "Video", icon: Video, emoji: "🎬", color: "text-red-400 bg-red-400/10" },
-  { type: "link", label: "Link", icon: Link2, emoji: "🔗", color: "text-cyan-400 bg-cyan-400/10" },
-  { type: "text", label: "Text", icon: FileText, emoji: "📝", color: "text-slate-400 bg-slate-400/10" },
+  {
+    type: "folder",
+    label: "Folder",
+    description: "Group content together",
+    icon: Folder,
+    gradient: "from-amber-400 to-orange-400",
+    iconBg: "bg-amber-100 text-amber-600",
+    hoverBg: "hover:bg-amber-50 hover:border-amber-200",
+    selectedBg: "bg-amber-50 border-amber-300",
+  },
+  {
+    type: "song",
+    label: "Song",
+    description: "Audio track with metadata",
+    icon: Music,
+    gradient: "from-emerald-400 to-green-500",
+    iconBg: "bg-emerald-100 text-emerald-600",
+    hoverBg: "hover:bg-emerald-50 hover:border-emerald-200",
+    selectedBg: "bg-emerald-50 border-emerald-300",
+  },
+  {
+    type: "album",
+    label: "Album",
+    description: "Music album with cover art",
+    icon: Disc3,
+    gradient: "from-purple-400 to-violet-500",
+    iconBg: "bg-purple-100 text-purple-600",
+    hoverBg: "hover:bg-purple-50 hover:border-purple-200",
+    selectedBg: "bg-purple-50 border-purple-300",
+  },
+  {
+    type: "playlist",
+    label: "Playlist",
+    description: "Curated song collection",
+    icon: ListMusic,
+    gradient: "from-blue-400 to-cyan-500",
+    iconBg: "bg-blue-100 text-blue-600",
+    hoverBg: "hover:bg-blue-50 hover:border-blue-200",
+    selectedBg: "bg-blue-50 border-blue-300",
+  },
+  {
+    type: "photo_album",
+    label: "Photos",
+    description: "Photo gallery",
+    icon: Image,
+    gradient: "from-pink-400 to-rose-500",
+    iconBg: "bg-pink-100 text-pink-600",
+    hoverBg: "hover:bg-pink-50 hover:border-pink-200",
+    selectedBg: "bg-pink-50 border-pink-300",
+  },
+  {
+    type: "video",
+    label: "Video",
+    description: "Video with thumbnail",
+    icon: Video,
+    gradient: "from-red-400 to-orange-500",
+    iconBg: "bg-red-100 text-red-600",
+    hoverBg: "hover:bg-red-50 hover:border-red-200",
+    selectedBg: "bg-red-50 border-red-300",
+  },
+  {
+    type: "link",
+    label: "Link",
+    description: "External URL",
+    icon: Link2,
+    gradient: "from-cyan-400 to-blue-500",
+    iconBg: "bg-cyan-100 text-cyan-600",
+    hoverBg: "hover:bg-cyan-50 hover:border-cyan-200",
+    selectedBg: "bg-cyan-50 border-cyan-300",
+  },
+  {
+    type: "text",
+    label: "Text",
+    description: "Rich text content",
+    icon: FileText,
+    gradient: "from-slate-400 to-gray-500",
+    iconBg: "bg-slate-100 text-slate-600",
+    hoverBg: "hover:bg-slate-50 hover:border-slate-200",
+    selectedBg: "bg-slate-50 border-slate-300",
+  },
 ];
 
 type Step = "type" | "form";
@@ -62,6 +134,7 @@ export function AddNodeDialog({
   const [bodyText, setBodyText] = useState("");
 
   const parentNode = parentId ? allNodes.find((n) => n.id === parentId) : null;
+  const selectedConfig = NODE_TYPES.find((t) => t.type === selectedType);
 
   const resetForm = () => {
     setStep("type");
@@ -84,27 +157,16 @@ export function AddNodeDialog({
         status: "draft",
         metadata: {},
       };
-
-      if (selectedType === "song") {
-        body.metadata.artistName = artistName || null;
-        body.metadata.albumName = albumName || null;
-      }
-      if (selectedType === "album") {
-        body.metadata.artistName = artistName || null;
-      }
-      if (selectedType === "link") {
-        body.metadata.linkUrl = linkUrl || null;
-      }
-      if (selectedType === "text") {
-        body.metadata.bodyText = bodyText || null;
-      }
-
+      if (selectedType === "song") { body.metadata.artistName = artistName || null; body.metadata.albumName = albumName || null; }
+      if (selectedType === "album") { body.metadata.artistName = artistName || null; }
+      if (selectedType === "link") { body.metadata.linkUrl = linkUrl || null; }
+      if (selectedType === "text") { body.metadata.bodyText = bodyText || null; }
       const res = await apiRequest("POST", "/api/nodes", body);
       return res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
-      toast({ title: "Created", description: `"${title}" has been created.` });
+      toast({ title: "Created ✨", description: `"${title}" is ready to edit.` });
       onNodeCreated(data.id);
       resetForm();
     },
@@ -114,161 +176,129 @@ export function AddNodeDialog({
   });
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v);
-        if (!v) resetForm();
-      }}
-    >
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-base">
-            {step === "type" ? "Add New Node" : `New ${NODE_TYPES.find((t) => t.type === selectedType)?.label}`}
-          </DialogTitle>
-          {parentNode && (
-            <p className="text-xs text-muted-foreground">
-              Adding to: {parentNode.title}
-            </p>
-          )}
-          {!parentNode && parentId === null && (
-            <p className="text-xs text-muted-foreground">Adding to root level</p>
-          )}
-        </DialogHeader>
-
-        {step === "type" && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 py-2">
-            {NODE_TYPES.map((t) => (
-              <button
-                key={t.type}
-                className={cn(
-                  "flex flex-col items-center gap-2 p-4 md:p-3 rounded-lg border border-border transition-colors",
-                  "hover:bg-muted/50 hover:border-primary/30 active:bg-muted/70",
-                  "focus:outline-none focus:ring-2 focus:ring-primary"
-                )}
-                onClick={() => {
-                  setSelectedType(t.type);
-                  setStep("form");
-                }}
-                data-testid={`button-type-${t.type}`}
-              >
-                <div className={cn("w-12 h-12 md:w-10 md:h-10 rounded-lg flex items-center justify-center", t.color)}>
-                  <t.icon className="h-6 w-6 md:h-5 md:w-5" />
-                </div>
-                <span className="text-sm md:text-xs font-medium">{t.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {step === "form" && selectedType && (
-          <div className="space-y-4 py-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setStep("type")}
-              className="text-xs -ml-2 text-muted-foreground h-9"
-            >
-              <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-              Back to type selection
-            </Button>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Title</Label>
-              <Input
-                data-testid="input-new-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter title..."
-                className="bg-card text-base md:text-sm h-11 md:h-9"
-                autoFocus
-              />
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
+      <DialogContent className="sm:max-w-lg p-0 overflow-hidden rounded-2xl">
+        {step === "type" ? (
+          <>
+            {/* Gradient header */}
+            <div className="bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 px-6 py-5">
+              <DialogTitle className="text-white text-base font-bold">What are you creating?</DialogTitle>
+              <p className="text-white/65 text-sm mt-0.5">
+                {parentNode ? `Inside "${parentNode.title}"` : "At the root level"}
+              </p>
             </div>
 
-            {selectedType === "song" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Artist</Label>
-                  <Input
-                    data-testid="input-new-artist"
-                    value={artistName}
-                    onChange={(e) => setArtistName(e.target.value)}
-                    className="bg-card text-base md:text-sm h-11 md:h-9"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Album</Label>
-                  <Input
-                    data-testid="input-new-album"
-                    value={albumName}
-                    onChange={(e) => setAlbumName(e.target.value)}
-                    className="bg-card text-base md:text-sm h-11 md:h-9"
-                  />
-                </div>
-              </div>
-            )}
-
-            {selectedType === "album" && (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Artist</Label>
-                <Input
-                  data-testid="input-new-artist"
-                  value={artistName}
-                  onChange={(e) => setArtistName(e.target.value)}
-                  className="bg-card text-base md:text-sm h-11 md:h-9"
-                />
-              </div>
-            )}
-
-            {selectedType === "link" && (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">URL</Label>
-                <Input
-                  data-testid="input-new-link-url"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="bg-card text-base md:text-sm h-11 md:h-9"
-                />
-              </div>
-            )}
-
-            {selectedType === "text" && (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Body Text</Label>
-                <Textarea
-                  data-testid="input-new-body-text"
-                  value={bodyText}
-                  onChange={(e) => setBodyText(e.target.value)}
-                  rows={4}
-                  className="bg-card resize-y text-base md:text-sm"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="secondary"
-                size="default"
-                className="h-10 md:h-8"
-                onClick={() => {
-                  onOpenChange(false);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="default"
-                className="h-10 md:h-8"
-                onClick={() => createMutation.mutate()}
-                disabled={!title.trim() || createMutation.isPending}
-                data-testid="button-create-node"
-              >
-                {createMutation.isPending ? "Creating..." : "Create"}
-              </Button>
+            {/* Type grid */}
+            <div className="grid grid-cols-2 gap-2.5 p-5">
+              {NODE_TYPES.map((t) => (
+                <button
+                  key={t.type}
+                  className={cn(
+                    "group flex items-center gap-3 p-3.5 rounded-xl border border-border/60 transition-all duration-150 text-left active:scale-[0.97]",
+                    t.hoverBg
+                  )}
+                  onClick={() => { setSelectedType(t.type); setStep("form"); }}
+                  data-testid={`button-type-${t.type}`}
+                >
+                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm", t.iconBg)}>
+                    <t.icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-tight">{t.label}</p>
+                    <p className="text-xs text-muted-foreground leading-snug mt-0.5 truncate">{t.description}</p>
+                  </div>
+                </button>
+              ))}
             </div>
-          </div>
+          </>
+        ) : (
+          <>
+            {/* Gradient header based on selected type */}
+            {selectedConfig && (
+              <div className={cn("bg-gradient-to-br px-6 py-5", selectedConfig.gradient, "from-opacity-80")}>
+                <button
+                  onClick={() => setStep("type")}
+                  className="flex items-center gap-1.5 text-white/70 hover:text-white text-xs font-medium mb-3 transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Back
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-white/25 flex items-center justify-center flex-shrink-0">
+                    <selectedConfig.icon className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-white text-base font-bold">New {selectedConfig.label}</DialogTitle>
+                    <p className="text-white/65 text-xs mt-0.5">{selectedConfig.description}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Form */}
+            <div className="p-5 space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold">Title</Label>
+                <Input
+                  data-testid="input-new-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={`${selectedConfig?.label} title…`}
+                  className="bg-muted/30"
+                  autoFocus
+                />
+              </div>
+
+              {selectedType === "song" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold">Artist</Label>
+                    <Input data-testid="input-new-artist" value={artistName} onChange={(e) => setArtistName(e.target.value)} placeholder="Artist name" className="bg-muted/30" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold">Album</Label>
+                    <Input data-testid="input-new-album" value={albumName} onChange={(e) => setAlbumName(e.target.value)} placeholder="Album name" className="bg-muted/30" />
+                  </div>
+                </div>
+              )}
+
+              {selectedType === "album" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Artist</Label>
+                  <Input data-testid="input-new-artist" value={artistName} onChange={(e) => setArtistName(e.target.value)} placeholder="Artist name" className="bg-muted/30" />
+                </div>
+              )}
+
+              {selectedType === "link" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">URL</Label>
+                  <Input data-testid="input-new-link-url" value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://..." className="bg-muted/30" />
+                </div>
+              )}
+
+              {selectedType === "text" && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Body Text</Label>
+                  <Textarea data-testid="input-new-body-text" value={bodyText} onChange={(e) => setBodyText(e.target.value)} rows={4} placeholder="Write something…" className="bg-muted/30 resize-y" />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="outline" size="default" onClick={() => { onOpenChange(false); resetForm(); }}>
+                  Cancel
+                </Button>
+                <Button
+                  size="default"
+                  onClick={() => createMutation.mutate()}
+                  disabled={!title.trim() || createMutation.isPending}
+                  data-testid="button-create-node"
+                  className={cn("px-6 gap-2 bg-gradient-to-r border-0 shadow-sm", selectedConfig?.gradient)}
+                >
+                  {createMutation.isPending ? "Creating…" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </DialogContent>
     </Dialog>

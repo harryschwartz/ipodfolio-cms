@@ -19,9 +19,7 @@ function AppRouter() {
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme] = useState<"dark" | "light">(() => {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "dark"; // force dark for this admin CMS
+    return "light"; // light mode — life's too short for dark grey
   });
 
   useEffect(() => {
