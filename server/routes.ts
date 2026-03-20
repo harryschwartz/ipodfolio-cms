@@ -9,6 +9,14 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Initialize database tables and seed data if using DB storage
+  try {
+    await storage.ensureTables();
+    console.log("[routes] Database tables ensured");
+  } catch (err) {
+    console.error("[routes] Failed to ensure tables:", err);
+  }
+
   // ─── PUBLIC API (CORS-enabled, read-only) ───
   // Returns published nodes for the iPodfolio frontend to consume
   app.get("/api/public/nodes", async (_req, res) => {
