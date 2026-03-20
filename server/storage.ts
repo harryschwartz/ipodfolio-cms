@@ -986,10 +986,8 @@ export class MemStorage implements IStorage {
 }
 
 // ─── STORAGE INSTANCE ───
-// Uses DatabaseStorage if DATABASE_URL is set, otherwise falls back to MemStorage
+// Always uses DatabaseStorage (Supabase) — connection string is hardcoded as fallback in db.ts
 
-export const storage: IStorage = process.env.DATABASE_URL
-  ? new DatabaseStorage()
-  : new MemStorage();
+export const storage: IStorage = new DatabaseStorage();
 
-console.log(`[storage] Using ${process.env.DATABASE_URL ? "PostgreSQL (Supabase)" : "in-memory"} storage`);
+console.log(`[storage] Using PostgreSQL (Supabase) storage`);
