@@ -67,8 +67,10 @@ const TYPE_SELECTED_BG: Record<string, string> = {
   cover_flow_music:"bg-violet-50  shadow-[inset_3px_0_0_theme(colors.violet.400)]",
 };
 
-function hasChildren(nodeId: string, nodes: MenuNodeWithMetadata[]): boolean {
-  return nodes.some((n) => n.parentId === nodeId);
+const FOLDER_TYPES = new Set(["folder", "album", "playlist", "photo_album"]);
+
+function isFolder(node: MenuNodeWithMetadata, nodes: MenuNodeWithMetadata[]): boolean {
+  return FOLDER_TYPES.has(node.type) || nodes.some((n) => n.parentId === node.id);
 }
 
 function TreeNode({
@@ -82,8 +84,10 @@ function TreeNode({
   toggleExpanded,
   onDragStart,
   onDragOver,
+  onDragLeave,
   onDrop,
   dragOverId,
+  dropFolderId,
 }: {
   node: MenuNodeWithMetadata;
   nodes: MenuNodeWithMetadata[];
@@ -95,16 +99,19 @@ function TreeNode({
   toggleExpanded: (id: string) => void;
   onDragStart: (e: React.DragEvent, nodeId: string) => void;
   onDragOver: (e: React.DragEvent, nodeId: string) => void;
+  onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, nodeId: string) => void;
   dragOverId: string | null;
+  dropFolderId: string | null;
 }) {
   const Icon = TYPE_ICONS[node.type] || FileText;
   const iconStyle = TYPE_ICON_STYLE[node.type] || "bg-gray-100 text-gray-500";
   const selectedBg = TYPE_SELECTED_BG[node.type] || "bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary))]";
   const isExpanded = expandedIds.has(node.id);
-  const isFolder = hasChildren(node.id, nodes) || ["folder", "album", "playlist"].includes(node.type);
+  const nodeIsFolder = isFolder(node, nodes);
   const isSelected = node.id === selectedNodeId;
-  const isDragOver = node.id === dragOverId;
+  const isSiblingDragOver = node.id === dragOverId;
+  const isFolderDropTarget = node.id === dropFolderId;
   const isPublished = node.status === "published";
 
   const children = nodes
@@ -119,20 +126,22 @@ function TreeNode({
           isSelected
             ? cn("text-foreground font-medium", selectedBg)
             : "text-foreground/70 hover:text-foreground hover:bg-muted/60",
-          isDragOver && "bg-primary/10 border-t-2 border-primary/40"
+          isSiblingDragOver && "border-t-2 border-primary/60",
+          isFolderDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary/40"
         )}
         style={{ paddingLeft: `${depth * 16 + 10}px` }}
         onClick={() => onSelectNode(node.id)}
         draggable
         onDragStart={(e) => onDragStart(e, node.id)}
         onDragOver={(e) => onDragOver(e, node.id)}
+        onDragLeave={onDragLeave}
         onDrop={(e) => onDrop(e, node.id)}
       >
         {/* Drag handle */}
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
 
         {/* Expand toggle */}
-        {isFolder ? (
+        {nodeIsFolder ? (
           <button
             onClick={(e) => { e.stopPropagation(); toggleExpanded(node.id); }}
             className="flex-shrink-0 rounded hover:bg-black/5 p-0.5 -m-0.5 transition-colors"
@@ -160,7 +169,7 @@ function TreeNode({
         )}
 
         {/* Add child button */}
-        {isFolder && (
+        {nodeIsFolder && (
           <button
             onClick={(e) => { e.stopPropagation(); onAddNode(node.id); }}
             className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-black/8"
@@ -186,8 +195,10 @@ function TreeNode({
               toggleExpanded={toggleExpanded}
               onDragStart={onDragStart}
               onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
               onDrop={onDrop}
               dragOverId={dragOverId}
+              dropFolderId={dropFolderId}
             />
           ))}
         </div>
@@ -213,6 +224,7 @@ export function ContentTree({
   });
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropFolderId, setDropFolderId] = useState<string | null>(null);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds((prev) => {
@@ -229,33 +241,81 @@ export function ContentTree({
 
   const handleDragOver = useCallback((e: React.DragEvent, nodeId: string) => {
     e.preventDefault();
-    setDragOverId(nodeId);
+    const sourceId = e.dataTransfer.getData("text/plain") || dragNodeId;
+    const sourceNode = nodes.find((n) => n.id === sourceId);
+    const targetNode = nodes.find((n) => n.id === nodeId);
+    if (!sourceNode || !targetNode || sourceId === nodeId) return;
+
+    const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === nodeId);
+    const crossParent = sourceNode.parentId !== targetNode.parentId;
+
+    if (targetIsFolder && crossParent) {
+      // Dropping onto a different folder — show folder highlight
+      setDropFolderId(nodeId);
+      setDragOverId(null);
+    } else if (!crossParent) {
+      // Same parent — show reorder line
+      setDragOverId(nodeId);
+      setDropFolderId(null);
+    } else {
+      setDragOverId(nodeId);
+      setDropFolderId(null);
+    }
+  }, [nodes, dragNodeId]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only clear if we're truly leaving the row (not entering a child element)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDropFolderId(null);
+      setDragOverId(null);
+    }
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     setDragOverId(null);
+    setDropFolderId(null);
     const sourceId = e.dataTransfer.getData("text/plain");
     if (!sourceId || sourceId === targetId) return;
 
     const sourceNode = nodes.find((n) => n.id === sourceId);
     const targetNode = nodes.find((n) => n.id === targetId);
     if (!sourceNode || !targetNode) return;
-    if (sourceNode.parentId !== targetNode.parentId) return;
 
-    const siblings = nodes
-      .filter((n) => n.parentId === sourceNode.parentId)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === targetId);
+    const crossParent = sourceNode.parentId !== targetNode.parentId;
 
-    const orderedIds = siblings.map((n) => n.id);
-    const fromIndex = orderedIds.indexOf(sourceId);
-    const toIndex = orderedIds.indexOf(targetId);
-    orderedIds.splice(fromIndex, 1);
-    orderedIds.splice(toIndex, 0, sourceId);
+    if (targetIsFolder && crossParent) {
+      // Move source into the target folder
+      const targetChildren = nodes
+        .filter((n) => n.parentId === targetId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const newSortOrder = targetChildren.length > 0
+        ? targetChildren[targetChildren.length - 1].sortOrder + 1
+        : 0;
+      await apiRequest("PATCH", `/api/nodes/${sourceId}`, {
+        parentId: targetId,
+        sortOrder: newSortOrder,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      // Auto-expand the target folder
+      setExpandedIds((prev) => new Set([...prev, targetId]));
+    } else if (sourceNode.parentId === targetNode.parentId) {
+      // Reorder within the same parent
+      const siblings = nodes
+        .filter((n) => n.parentId === sourceNode.parentId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
 
-    const parentParam = sourceNode.parentId || "root";
-    await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
-    queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      const orderedIds = siblings.map((n) => n.id);
+      const fromIndex = orderedIds.indexOf(sourceId);
+      const toIndex = orderedIds.indexOf(targetId);
+      orderedIds.splice(fromIndex, 1);
+      orderedIds.splice(toIndex, 0, sourceId);
+
+      const parentParam = sourceNode.parentId || "root";
+      await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+    }
   }, [nodes]);
 
   const rootNodes = nodes.filter((n) => !n.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
@@ -275,8 +335,10 @@ export function ContentTree({
           toggleExpanded={toggleExpanded}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           dragOverId={dragOverId}
+          dropFolderId={dropFolderId}
         />
       ))}
     </div>
