@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react";
-import { Badge } from "@/components/ui/badge";
 import {
   ChevronRight,
   ChevronDown,
@@ -36,19 +35,36 @@ const TYPE_ICONS: Record<string, any> = {
   cover_flow_music: Layers,
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  folder: "text-amber-400",
-  song: "text-green-400",
-  album: "text-purple-400",
-  playlist: "text-blue-400",
-  photo_album: "text-pink-400",
-  video: "text-red-400",
-  link: "text-cyan-400",
-  text: "text-slate-400",
-  settings: "text-gray-400",
-  game: "text-orange-400",
-  cover_flow_home: "text-indigo-400",
-  cover_flow_music: "text-indigo-400",
+// Icon badge: background + icon color per type
+const TYPE_ICON_STYLE: Record<string, string> = {
+  folder:          "bg-amber-100   text-amber-600",
+  song:            "bg-emerald-100 text-emerald-600",
+  album:           "bg-purple-100  text-purple-600",
+  playlist:        "bg-blue-100    text-blue-600",
+  photo_album:     "bg-pink-100    text-pink-600",
+  video:           "bg-red-100     text-red-600",
+  link:            "bg-cyan-100    text-cyan-600",
+  text:            "bg-slate-100   text-slate-600",
+  settings:        "bg-gray-100    text-gray-500",
+  game:            "bg-orange-100  text-orange-600",
+  cover_flow_home: "bg-indigo-100  text-indigo-600",
+  cover_flow_music:"bg-violet-100  text-violet-600",
+};
+
+// Selected row tint per type
+const TYPE_SELECTED_BG: Record<string, string> = {
+  folder:          "bg-amber-50   shadow-[inset_3px_0_0_theme(colors.amber.400)]",
+  song:            "bg-emerald-50 shadow-[inset_3px_0_0_theme(colors.emerald.400)]",
+  album:           "bg-purple-50  shadow-[inset_3px_0_0_theme(colors.purple.400)]",
+  playlist:        "bg-blue-50    shadow-[inset_3px_0_0_theme(colors.blue.400)]",
+  photo_album:     "bg-pink-50    shadow-[inset_3px_0_0_theme(colors.pink.400)]",
+  video:           "bg-red-50     shadow-[inset_3px_0_0_theme(colors.red.400)]",
+  link:            "bg-cyan-50    shadow-[inset_3px_0_0_theme(colors.cyan.400)]",
+  text:            "bg-slate-50   shadow-[inset_3px_0_0_theme(colors.slate.400)]",
+  settings:        "bg-gray-50    shadow-[inset_3px_0_0_theme(colors.gray.400)]",
+  game:            "bg-orange-50  shadow-[inset_3px_0_0_theme(colors.orange.400)]",
+  cover_flow_home: "bg-indigo-50  shadow-[inset_3px_0_0_theme(colors.indigo.400)]",
+  cover_flow_music:"bg-violet-50  shadow-[inset_3px_0_0_theme(colors.violet.400)]",
 };
 
 function hasChildren(nodeId: string, nodes: MenuNodeWithMetadata[]): boolean {
@@ -83,7 +99,8 @@ function TreeNode({
   dragOverId: string | null;
 }) {
   const Icon = TYPE_ICONS[node.type] || FileText;
-  const colorClass = TYPE_COLORS[node.type] || "text-muted-foreground";
+  const iconStyle = TYPE_ICON_STYLE[node.type] || "bg-gray-100 text-gray-500";
+  const selectedBg = TYPE_SELECTED_BG[node.type] || "bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary))]";
   const isExpanded = expandedIds.has(node.id);
   const isFolder = hasChildren(node.id, nodes) || ["folder", "album", "playlist"].includes(node.type);
   const isSelected = node.id === selectedNodeId;
@@ -98,60 +115,55 @@ function TreeNode({
     <div data-testid={`tree-node-${node.id}`}>
       <div
         className={cn(
-          "flex items-center gap-2 py-2 pr-3 cursor-pointer group transition-all duration-100",
+          "flex items-center gap-2 py-1.5 pr-3 cursor-pointer group transition-all duration-100 rounded-none",
           isSelected
-            ? "bg-primary/10 text-foreground shadow-[inset_3px_0_0_hsl(var(--primary))]"
-            : "hover:bg-muted/40 text-foreground/75 hover:text-foreground",
-          isDragOver && "bg-primary/10 border-t border-primary/30"
+            ? cn("text-foreground font-medium", selectedBg)
+            : "text-foreground/70 hover:text-foreground hover:bg-muted/60",
+          isDragOver && "bg-primary/10 border-t-2 border-primary/40"
         )}
-        style={{ paddingLeft: `${depth * 16 + 12}px` }}
+        style={{ paddingLeft: `${depth * 16 + 10}px` }}
         onClick={() => onSelectNode(node.id)}
         draggable
         onDragStart={(e) => onDragStart(e, node.id)}
         onDragOver={(e) => onDragOver(e, node.id)}
         onDrop={(e) => onDrop(e, node.id)}
       >
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground/30 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
+        {/* Drag handle */}
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
 
+        {/* Expand toggle */}
         {isFolder ? (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleExpanded(node.id);
-            }}
-            className="flex-shrink-0 p-0.5 -m-0.5 rounded hover:bg-muted/60 transition-colors"
+            onClick={(e) => { e.stopPropagation(); toggleExpanded(node.id); }}
+            className="flex-shrink-0 rounded hover:bg-black/5 p-0.5 -m-0.5 transition-colors"
             data-testid={`button-toggle-${node.id}`}
           >
-            {isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
+            {isExpanded
+              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
           </button>
         ) : (
           <span className="w-3.5 flex-shrink-0" />
         )}
 
-        <Icon className={cn("h-4 w-4 flex-shrink-0", colorClass)} />
+        {/* Colored icon badge */}
+        <div className={cn("w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors", iconStyle)}>
+          <Icon className="h-3.5 w-3.5" />
+        </div>
 
-        <span className="truncate flex-1 text-sm font-medium">{node.title}</span>
+        {/* Title */}
+        <span className="truncate flex-1 text-sm">{node.title}</span>
 
-        {/* Status dot */}
-        <div
-          className={cn(
-            "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors",
-            isPublished ? "bg-green-400" : "bg-muted-foreground/30"
-          )}
-          title={isPublished ? "Published" : "Draft"}
-        />
+        {/* Live indicator dot */}
+        {isPublished && (
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" title="Published" />
+        )}
 
+        {/* Add child button */}
         {isFolder && (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddNode(node.id);
-            }}
-            className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-muted/60"
+            onClick={(e) => { e.stopPropagation(); onAddNode(node.id); }}
+            className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-black/8"
             data-testid={`button-add-child-${node.id}`}
           >
             <Plus className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
@@ -196,10 +208,7 @@ export function ContentTree({
   onAddNode: (parentId: string | null) => void;
 }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
-    // Auto-expand root-level folders
-    const rootFolders = nodes
-      .filter((n) => !n.parentId)
-      .map((n) => n.id);
+    const rootFolders = nodes.filter((n) => !n.parentId).map((n) => n.id);
     return new Set(rootFolders);
   });
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
@@ -208,69 +217,51 @@ export function ContentTree({
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   }, []);
 
-  const handleDragStart = useCallback(
-    (e: React.DragEvent, nodeId: string) => {
-      e.dataTransfer.setData("text/plain", nodeId);
-      setDragNodeId(nodeId);
-    },
-    []
-  );
+  const handleDragStart = useCallback((e: React.DragEvent, nodeId: string) => {
+    e.dataTransfer.setData("text/plain", nodeId);
+    setDragNodeId(nodeId);
+  }, []);
 
-  const handleDragOver = useCallback(
-    (e: React.DragEvent, nodeId: string) => {
-      e.preventDefault();
-      setDragOverId(nodeId);
-    },
-    []
-  );
+  const handleDragOver = useCallback((e: React.DragEvent, nodeId: string) => {
+    e.preventDefault();
+    setDragOverId(nodeId);
+  }, []);
 
-  const handleDrop = useCallback(
-    async (e: React.DragEvent, targetId: string) => {
-      e.preventDefault();
-      setDragOverId(null);
-      const sourceId = e.dataTransfer.getData("text/plain");
-      if (!sourceId || sourceId === targetId) return;
+  const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setDragOverId(null);
+    const sourceId = e.dataTransfer.getData("text/plain");
+    if (!sourceId || sourceId === targetId) return;
 
-      const sourceNode = nodes.find((n) => n.id === sourceId);
-      const targetNode = nodes.find((n) => n.id === targetId);
-      if (!sourceNode || !targetNode) return;
+    const sourceNode = nodes.find((n) => n.id === sourceId);
+    const targetNode = nodes.find((n) => n.id === targetId);
+    if (!sourceNode || !targetNode) return;
+    if (sourceNode.parentId !== targetNode.parentId) return;
 
-      // Only reorder within the same parent
-      if (sourceNode.parentId !== targetNode.parentId) return;
+    const siblings = nodes
+      .filter((n) => n.parentId === sourceNode.parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
 
-      const siblings = nodes
-        .filter((n) => n.parentId === sourceNode.parentId)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
+    const orderedIds = siblings.map((n) => n.id);
+    const fromIndex = orderedIds.indexOf(sourceId);
+    const toIndex = orderedIds.indexOf(targetId);
+    orderedIds.splice(fromIndex, 1);
+    orderedIds.splice(toIndex, 0, sourceId);
 
-      const orderedIds = siblings.map((n) => n.id);
-      const fromIndex = orderedIds.indexOf(sourceId);
-      const toIndex = orderedIds.indexOf(targetId);
+    const parentParam = sourceNode.parentId || "root";
+    await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
+    queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+  }, [nodes]);
 
-      orderedIds.splice(fromIndex, 1);
-      orderedIds.splice(toIndex, 0, sourceId);
-
-      const parentParam = sourceNode.parentId || "root";
-      await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
-      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
-    },
-    [nodes]
-  );
-
-  const rootNodes = nodes
-    .filter((n) => !n.parentId)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const rootNodes = nodes.filter((n) => !n.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
-    <div className="pb-2" data-testid="content-tree">
+    <div data-testid="content-tree">
       {rootNodes.map((node) => (
         <TreeNode
           key={node.id}
