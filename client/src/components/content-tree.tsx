@@ -1,5 +1,4 @@
 import { useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   ChevronRight,
@@ -89,6 +88,7 @@ function TreeNode({
   const isFolder = hasChildren(node.id, nodes) || ["folder", "album", "playlist"].includes(node.type);
   const isSelected = node.id === selectedNodeId;
   const isDragOver = node.id === dragOverId;
+  const isPublished = node.status === "published";
 
   const children = nodes
     .filter((n) => n.parentId === node.id)
@@ -98,11 +98,10 @@ function TreeNode({
     <div data-testid={`tree-node-${node.id}`}>
       <div
         className={cn(
-          "flex items-center gap-2 px-3 py-2.5 cursor-pointer group transition-colors",
-          "md:gap-1 md:px-2 md:py-1",
+          "flex items-center gap-2 py-2 pr-3 cursor-pointer group transition-all duration-100",
           isSelected
-            ? "bg-primary/15 text-foreground"
-            : "hover:bg-muted/50 text-foreground/80 active:bg-muted/70",
+            ? "bg-primary/10 text-foreground shadow-[inset_3px_0_0_hsl(var(--primary))]"
+            : "hover:bg-muted/40 text-foreground/75 hover:text-foreground",
           isDragOver && "bg-primary/10 border-t border-primary/30"
         )}
         style={{ paddingLeft: `${depth * 16 + 12}px` }}
@@ -112,7 +111,7 @@ function TreeNode({
         onDragOver={(e) => onDragOver(e, node.id)}
         onDrop={(e) => onDrop(e, node.id)}
       >
-        <GripVertical className="h-4 w-4 md:h-3 md:w-3 text-muted-foreground/30 opacity-100 md:opacity-0 md:group-hover:opacity-100 cursor-grab flex-shrink-0" />
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground/30 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
 
         {isFolder ? (
           <button
@@ -120,34 +119,31 @@ function TreeNode({
               e.stopPropagation();
               toggleExpanded(node.id);
             }}
-            className="flex-shrink-0 p-0.5 -m-0.5"
+            className="flex-shrink-0 p-0.5 -m-0.5 rounded hover:bg-muted/60 transition-colors"
             data-testid={`button-toggle-${node.id}`}
           >
             {isExpanded ? (
-              <ChevronDown className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground" />
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </button>
         ) : (
-          <span className="w-4 md:w-3.5 flex-shrink-0" />
+          <span className="w-3.5 flex-shrink-0" />
         )}
 
-        <Icon className={cn("h-4.5 w-4.5 md:h-3.5 md:w-3.5 flex-shrink-0", colorClass)} />
+        <Icon className={cn("h-4 w-4 flex-shrink-0", colorClass)} />
 
-        <span className="truncate flex-1 text-sm md:text-xs">{node.title}</span>
+        <span className="truncate flex-1 text-sm font-medium">{node.title}</span>
 
-        <Badge
-          variant={node.status === "published" ? "default" : "secondary"}
+        {/* Status dot */}
+        <div
           className={cn(
-            "text-[10px] px-1.5 py-0 h-5 md:h-4 flex-shrink-0",
-            node.status === "published"
-              ? "bg-green-500/15 text-green-400 border-green-500/20"
-              : "bg-muted text-muted-foreground"
+            "w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors",
+            isPublished ? "bg-green-400" : "bg-muted-foreground/30"
           )}
-        >
-          {node.status === "published" ? "live" : "draft"}
-        </Badge>
+          title={isPublished ? "Published" : "Draft"}
+        />
 
         {isFolder && (
           <button
@@ -155,10 +151,10 @@ function TreeNode({
               e.stopPropagation();
               onAddNode(node.id);
             }}
-            className="p-1 -m-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+            className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-muted/60"
             data-testid={`button-add-child-${node.id}`}
           >
-            <Plus className="h-4 w-4 md:h-3 md:w-3 text-muted-foreground hover:text-foreground" />
+            <Plus className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
           </button>
         )}
       </div>
@@ -274,7 +270,7 @@ export function ContentTree({
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
-    <div className="py-1" data-testid="content-tree">
+    <div className="pb-2" data-testid="content-tree">
       {rootNodes.map((node) => (
         <TreeNode
           key={node.id}

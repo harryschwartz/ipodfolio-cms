@@ -27,14 +27,78 @@ import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
 const NODE_TYPES = [
-  { type: "folder", label: "Folder", icon: Folder, emoji: "📁", color: "text-amber-400 bg-amber-400/10" },
-  { type: "song", label: "Song", icon: Music, emoji: "🎵", color: "text-green-400 bg-green-400/10" },
-  { type: "album", label: "Album", icon: Disc3, emoji: "💿", color: "text-purple-400 bg-purple-400/10" },
-  { type: "playlist", label: "Playlist", icon: ListMusic, emoji: "📋", color: "text-blue-400 bg-blue-400/10" },
-  { type: "photo_album", label: "Photos", icon: Image, emoji: "📷", color: "text-pink-400 bg-pink-400/10" },
-  { type: "video", label: "Video", icon: Video, emoji: "🎬", color: "text-red-400 bg-red-400/10" },
-  { type: "link", label: "Link", icon: Link2, emoji: "🔗", color: "text-cyan-400 bg-cyan-400/10" },
-  { type: "text", label: "Text", icon: FileText, emoji: "📝", color: "text-slate-400 bg-slate-400/10" },
+  {
+    type: "folder",
+    label: "Folder",
+    description: "Group related items",
+    icon: Folder,
+    color: "text-amber-400",
+    bg: "bg-amber-400/10 group-hover:bg-amber-400/20",
+    border: "group-hover:border-amber-400/30",
+  },
+  {
+    type: "song",
+    label: "Song",
+    description: "Audio track with metadata",
+    icon: Music,
+    color: "text-green-400",
+    bg: "bg-green-400/10 group-hover:bg-green-400/20",
+    border: "group-hover:border-green-400/30",
+  },
+  {
+    type: "album",
+    label: "Album",
+    description: "Music album with cover",
+    icon: Disc3,
+    color: "text-purple-400",
+    bg: "bg-purple-400/10 group-hover:bg-purple-400/20",
+    border: "group-hover:border-purple-400/30",
+  },
+  {
+    type: "playlist",
+    label: "Playlist",
+    description: "Curated song collection",
+    icon: ListMusic,
+    color: "text-blue-400",
+    bg: "bg-blue-400/10 group-hover:bg-blue-400/20",
+    border: "group-hover:border-blue-400/30",
+  },
+  {
+    type: "photo_album",
+    label: "Photos",
+    description: "Photo gallery",
+    icon: Image,
+    color: "text-pink-400",
+    bg: "bg-pink-400/10 group-hover:bg-pink-400/20",
+    border: "group-hover:border-pink-400/30",
+  },
+  {
+    type: "video",
+    label: "Video",
+    description: "Video with thumbnail",
+    icon: Video,
+    color: "text-red-400",
+    bg: "bg-red-400/10 group-hover:bg-red-400/20",
+    border: "group-hover:border-red-400/30",
+  },
+  {
+    type: "link",
+    label: "Link",
+    description: "External URL",
+    icon: Link2,
+    color: "text-cyan-400",
+    bg: "bg-cyan-400/10 group-hover:bg-cyan-400/20",
+    border: "group-hover:border-cyan-400/30",
+  },
+  {
+    type: "text",
+    label: "Text",
+    description: "Rich text content",
+    icon: FileText,
+    color: "text-slate-400",
+    bg: "bg-slate-400/10 group-hover:bg-slate-400/20",
+    border: "group-hover:border-slate-400/30",
+  },
 ];
 
 type Step = "type" | "form";
@@ -62,6 +126,7 @@ export function AddNodeDialog({
   const [bodyText, setBodyText] = useState("");
 
   const parentNode = parentId ? allNodes.find((n) => n.id === parentId) : null;
+  const selectedTypeConfig = NODE_TYPES.find((t) => t.type === selectedType);
 
   const resetForm = () => {
     setStep("type");
@@ -121,30 +186,29 @@ export function AddNodeDialog({
         if (!v) resetForm();
       }}
     >
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base">
-            {step === "type" ? "Add New Node" : `New ${NODE_TYPES.find((t) => t.type === selectedType)?.label}`}
+          <DialogTitle className="text-base font-semibold">
+            {step === "type" ? "Add New Item" : `New ${selectedTypeConfig?.label}`}
           </DialogTitle>
-          {parentNode && (
-            <p className="text-xs text-muted-foreground">
-              Adding to: {parentNode.title}
+          {step === "type" && (
+            <p className="text-sm text-muted-foreground">
+              {parentNode
+                ? `Adding inside "${parentNode.title}"`
+                : "Adding at root level"}
             </p>
-          )}
-          {!parentNode && parentId === null && (
-            <p className="text-xs text-muted-foreground">Adding to root level</p>
           )}
         </DialogHeader>
 
         {step === "type" && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 py-2">
+          <div className="grid grid-cols-2 gap-2 py-1">
             {NODE_TYPES.map((t) => (
               <button
                 key={t.type}
                 className={cn(
-                  "flex flex-col items-center gap-2 p-4 md:p-3 rounded-lg border border-border transition-colors",
-                  "hover:bg-muted/50 hover:border-primary/30 active:bg-muted/70",
-                  "focus:outline-none focus:ring-2 focus:ring-primary"
+                  "group flex items-center gap-3 p-3.5 rounded-xl border border-border/60 transition-all duration-150 text-left",
+                  "hover:shadow-sm active:scale-[0.98]",
+                  t.border
                 )}
                 onClick={() => {
                   setSelectedType(t.type);
@@ -152,57 +216,73 @@ export function AddNodeDialog({
                 }}
                 data-testid={`button-type-${t.type}`}
               >
-                <div className={cn("w-12 h-12 md:w-10 md:h-10 rounded-lg flex items-center justify-center", t.color)}>
-                  <t.icon className="h-6 w-6 md:h-5 md:w-5" />
+                <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors", t.bg)}>
+                  <t.icon className={cn("h-4.5 w-4.5", t.color)} />
                 </div>
-                <span className="text-sm md:text-xs font-medium">{t.label}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium leading-tight">{t.label}</p>
+                  <p className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">{t.description}</p>
+                </div>
               </button>
             ))}
           </div>
         )}
 
         {step === "form" && selectedType && (
-          <div className="space-y-4 py-2">
-            <Button
-              variant="ghost"
-              size="sm"
+          <div className="space-y-4 py-1">
+            <button
               onClick={() => setStep("type")}
-              className="text-xs -ml-2 text-muted-foreground h-9"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
-              <ChevronLeft className="h-3.5 w-3.5 mr-1" />
-              Back to type selection
-            </Button>
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+
+            {/* Type preview */}
+            {selectedTypeConfig && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
+                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", selectedTypeConfig.bg.split(" ")[0])}>
+                  <selectedTypeConfig.icon className={cn("h-4 w-4", selectedTypeConfig.color)} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{selectedTypeConfig.label}</p>
+                  <p className="text-xs text-muted-foreground">{selectedTypeConfig.description}</p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Title</Label>
+              <Label className="text-sm font-medium">Title</Label>
               <Input
                 data-testid="input-new-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter title..."
-                className="bg-card text-base md:text-sm h-11 md:h-9"
+                placeholder={`${selectedTypeConfig?.label} title…`}
+                className="bg-muted/30"
                 autoFocus
               />
             </div>
 
             {selectedType === "song" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Artist</Label>
+                  <Label className="text-sm font-medium">Artist</Label>
                   <Input
                     data-testid="input-new-artist"
                     value={artistName}
                     onChange={(e) => setArtistName(e.target.value)}
-                    className="bg-card text-base md:text-sm h-11 md:h-9"
+                    placeholder="Artist name"
+                    className="bg-muted/30"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Album</Label>
+                  <Label className="text-sm font-medium">Album</Label>
                   <Input
                     data-testid="input-new-album"
                     value={albumName}
                     onChange={(e) => setAlbumName(e.target.value)}
-                    className="bg-card text-base md:text-sm h-11 md:h-9"
+                    placeholder="Album name"
+                    className="bg-muted/30"
                   />
                 </div>
               </div>
@@ -210,47 +290,48 @@ export function AddNodeDialog({
 
             {selectedType === "album" && (
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Artist</Label>
+                <Label className="text-sm font-medium">Artist</Label>
                 <Input
                   data-testid="input-new-artist"
                   value={artistName}
                   onChange={(e) => setArtistName(e.target.value)}
-                  className="bg-card text-base md:text-sm h-11 md:h-9"
+                  placeholder="Artist name"
+                  className="bg-muted/30"
                 />
               </div>
             )}
 
             {selectedType === "link" && (
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">URL</Label>
+                <Label className="text-sm font-medium">URL</Label>
                 <Input
                   data-testid="input-new-link-url"
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                   placeholder="https://..."
-                  className="bg-card text-base md:text-sm h-11 md:h-9"
+                  className="bg-muted/30"
                 />
               </div>
             )}
 
             {selectedType === "text" && (
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Body Text</Label>
+                <Label className="text-sm font-medium">Body Text</Label>
                 <Textarea
                   data-testid="input-new-body-text"
                   value={bodyText}
                   onChange={(e) => setBodyText(e.target.value)}
                   rows={4}
-                  className="bg-card resize-y text-base md:text-sm"
+                  placeholder="Write something…"
+                  className="bg-muted/30 resize-y"
                 />
               </div>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-1">
               <Button
-                variant="secondary"
+                variant="outline"
                 size="default"
-                className="h-10 md:h-8"
                 onClick={() => {
                   onOpenChange(false);
                   resetForm();
@@ -260,12 +341,12 @@ export function AddNodeDialog({
               </Button>
               <Button
                 size="default"
-                className="h-10 md:h-8"
                 onClick={() => createMutation.mutate()}
                 disabled={!title.trim() || createMutation.isPending}
                 data-testid="button-create-node"
+                className="px-6"
               >
-                {createMutation.isPending ? "Creating..." : "Create"}
+                {createMutation.isPending ? "Creating…" : "Create"}
               </Button>
             </div>
           </div>
