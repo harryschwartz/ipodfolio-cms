@@ -1,7 +1,8 @@
 // Vercel Serverless Function — wraps Express app for /api/* routes
+// Connects to Supabase PostgreSQL for persistent storage
 import express from "express";
 import multer from "multer";
-import { randomUUID } from "crypto";
+import pg from "pg";
 
 const app = express();
 app.use(express.json());
@@ -9,109 +10,251 @@ app.use(express.urlencoded({ extended: false }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-// ---- In-memory storage (persists within a single invocation / warm instance) ----
-class MemStorage {
-  constructor() {
-    this.nodes = new Map();
-    this.metadata = new Map();
-    this.seedData();
-  }
+// ---- Supabase PostgreSQL connection ----
+const DATABASE_URL = process.env.DATABASE_URL || "postgresql://postgres.xtjjavrixvnwoulgebqp:%40CByQ8i65cLD%40T3@aws-0-us-west-2.pooler.supabase.com:6543/postgres";
+const pool = new pg.Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 3 });
 
-  seedData() {
-    const seedNodes = [
-      { id: "cover-flow", parentId: null, type: "cover_flow_home", title: "Cover Flow", sortOrder: 0, status: "published", metadata: {} },
-      { id: "projects", parentId: null, type: "folder", title: "Projects", sortOrder: 1, status: "published", metadata: { previewImage: "img/projects-preview.jpg" } },
-      { id: "project-1", parentId: "projects", type: "album", title: "Fusion 360 Headphones", sortOrder: 0, status: "published", metadata: { coverImageUrl: "img/headphones-cover.jpg", artistName: "Harry Schwartz" } },
-      { id: "p1-audio", parentId: "project-1", type: "folder", title: "Audio", sortOrder: 0, status: "published", metadata: {} },
-      { id: "p1-why", parentId: "p1-audio", type: "song", title: "Why", sortOrder: 0, status: "published", metadata: { artistName: "Harry Schwartz", albumName: "Fusion 360 Headphones", duration: 120, audioUrl: "" } },
-      { id: "p1-journey", parentId: "p1-audio", type: "song", title: "Creative Journey", sortOrder: 1, status: "published", metadata: { artistName: "Harry Schwartz", albumName: "Fusion 360 Headphones", duration: 180, audioUrl: "" } },
-      { id: "p1-learnings", parentId: "p1-audio", type: "song", title: "Learnings", sortOrder: 2, status: "published", metadata: { artistName: "Harry Schwartz", albumName: "Fusion 360 Headphones", duration: 150, audioUrl: "" } },
-      { id: "p1-photos", parentId: "project-1", type: "photo_album", title: "Photos", sortOrder: 1, status: "published", metadata: { photos: [{ url: "img/placeholder-1.jpg", caption: "Design sketch", sortOrder: 0 }, { url: "img/placeholder-2.jpg", caption: "3D model", sortOrder: 1 }, { url: "img/placeholder-3.jpg", caption: "Final product", sortOrder: 2 }] } },
-      { id: "p1-videos", parentId: "project-1", type: "folder", title: "Videos", sortOrder: 2, status: "published", metadata: {} },
-      { id: "p1-demo", parentId: "p1-videos", type: "video", title: "Demo Video", sortOrder: 0, status: "published", metadata: { videoUrl: "", videoThumbnailUrl: "img/placeholder-video.jpg", duration: 90 } },
-      { id: "p1-tryit", parentId: "project-1", type: "link", title: "Try It", sortOrder: 3, status: "published", metadata: { linkUrl: "https://example.com" } },
-      { id: "project-2", parentId: "projects", type: "album", title: "Adobe Express Redesign", sortOrder: 1, status: "published", metadata: { coverImageUrl: "img/adobe-cover.jpg", artistName: "Harry Schwartz" } },
-      { id: "music", parentId: null, type: "folder", title: "Music", sortOrder: 2, status: "published", metadata: { previewImage: "img/music-preview.jpg" } },
-      { id: "music-coverflow", parentId: "music", type: "cover_flow_music", title: "Cover Flow", sortOrder: 0, status: "published", metadata: {} },
-      { id: "music-playlists", parentId: "music", type: "folder", title: "Playlists", sortOrder: 1, status: "published", metadata: {} },
-      { id: "dj-sets", parentId: "music-playlists", type: "playlist", title: "DJ Sets", sortOrder: 0, status: "published", metadata: { coverImageUrl: "img/dj-cover.jpg", songIds: ["dj-set-1", "dj-set-2"] } },
-      { id: "dj-set-1", parentId: "dj-sets", type: "song", title: "Set @ Berkeley 2025", sortOrder: 0, status: "published", metadata: { artistName: "DJ Harry", albumName: "DJ Sets", duration: 3600, audioUrl: "" } },
-      { id: "music-artists", parentId: "music", type: "folder", title: "Artists", sortOrder: 2, status: "published", metadata: {} },
-      { id: "music-albums", parentId: "music", type: "folder", title: "Albums", sortOrder: 3, status: "published", metadata: {} },
-      { id: "music-search", parentId: "music", type: "folder", title: "Search", sortOrder: 4, status: "published", metadata: {} },
-      { id: "games", parentId: null, type: "folder", title: "Games", sortOrder: 3, status: "published", metadata: { previewImage: "img/games-preview.jpg" } },
-      { id: "brick", parentId: "games", type: "game", title: "Brick", sortOrder: 0, status: "published", metadata: {} },
-      { id: "about", parentId: null, type: "text", title: "About", sortOrder: 4, status: "published", metadata: { bodyText: "Harry Schwartz is an MBA/MEng student at UC Berkeley (Haas + Engineering) with a background in product design from Stanford. He's passionate about creative tools, AI, and the intersection of hardware and software. When he's not building things, he's DJing, skiing, or exploring new ideas across design, engineering, and culture.", links: [{ label: "LinkedIn", url: "https://linkedin.com/in/harryschwartz" }, { label: "GitHub", url: "https://github.com/harryschwartz" }] } },
-      { id: "settings", parentId: null, type: "settings", title: "Settings", sortOrder: 5, status: "published", metadata: {} },
-    ];
-
-    for (const seed of seedNodes) {
-      const now = new Date();
-      this.nodes.set(seed.id, { id: seed.id, parentId: seed.parentId, type: seed.type, title: seed.title, sortOrder: seed.sortOrder, status: seed.status, createdAt: now, updatedAt: now });
-      const meta = { id: randomUUID(), nodeId: seed.id, coverImageUrl: seed.metadata.coverImageUrl || null, artistName: seed.metadata.artistName || null, albumName: seed.metadata.albumName || null, audioUrl: seed.metadata.audioUrl || null, videoUrl: seed.metadata.videoUrl || null, videoThumbnailUrl: seed.metadata.videoThumbnailUrl || null, linkUrl: seed.metadata.linkUrl || null, duration: seed.metadata.duration || null, bodyText: seed.metadata.bodyText || null, previewImage: seed.metadata.previewImage || null, photos: seed.metadata.photos || null, links: seed.metadata.links || null, songIds: seed.metadata.songIds || null, coverImages: seed.metadata.coverImages || null };
-      this.metadata.set(seed.id, meta);
+// Helper: get all nodes with metadata joined
+async function getAllNodes() {
+  const { rows } = await pool.query(`
+    SELECT n.*, 
+      m.id as meta_id, m.cover_image_url, m.artist_name, m.album_name, m.audio_url, 
+      m.video_url, m.video_thumbnail_url, m.link_url, m.duration, m.body_text,
+      m.preview_image, m.photos, m.links, m.song_ids, m.cover_images
+    FROM menu_nodes n
+    LEFT JOIN node_metadata m ON m.node_id = n.id
+    ORDER BY n.sort_order ASC
+  `);
+  return rows.map(r => ({
+    id: r.id,
+    parentId: r.parent_id,
+    type: r.type,
+    title: r.title,
+    sortOrder: r.sort_order,
+    status: r.status,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    metadata: {
+      id: r.meta_id,
+      nodeId: r.id,
+      coverImageUrl: r.cover_image_url,
+      artistName: r.artist_name,
+      albumName: r.album_name,
+      audioUrl: r.audio_url,
+      videoUrl: r.video_url,
+      videoThumbnailUrl: r.video_thumbnail_url,
+      linkUrl: r.link_url,
+      duration: r.duration,
+      bodyText: r.body_text,
+      previewImage: r.preview_image,
+      photos: r.photos,
+      links: r.links,
+      songIds: r.song_ids,
+      coverImages: r.cover_images,
     }
-  }
-
-  getWithMeta(node) {
-    return { ...node, metadata: this.metadata.get(node.id) || null };
-  }
-
-  getAllNodes() { return Array.from(this.nodes.values()).sort((a, b) => a.sortOrder - b.sortOrder).map(n => this.getWithMeta(n)); }
-  getNode(id) { const n = this.nodes.get(id); return n ? this.getWithMeta(n) : undefined; }
-  getChildren(parentId) { return Array.from(this.nodes.values()).filter(n => n.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder).map(n => this.getWithMeta(n)); }
-
-  createNode(data, metaData = {}) {
-    const id = randomUUID();
-    const now = new Date();
-    const node = { id, parentId: data.parentId || null, type: data.type, title: data.title, sortOrder: data.sortOrder ?? 0, status: data.status || "draft", createdAt: now, updatedAt: now };
-    this.nodes.set(id, node);
-    const meta = { id: randomUUID(), nodeId: id, coverImageUrl: metaData.coverImageUrl || null, artistName: metaData.artistName || null, albumName: metaData.albumName || null, audioUrl: metaData.audioUrl || null, videoUrl: metaData.videoUrl || null, videoThumbnailUrl: metaData.videoThumbnailUrl || null, linkUrl: metaData.linkUrl || null, duration: metaData.duration || null, bodyText: metaData.bodyText || null, previewImage: metaData.previewImage || null, photos: metaData.photos || null, links: metaData.links || null, songIds: metaData.songIds || null, coverImages: metaData.coverImages || null };
-    this.metadata.set(id, meta);
-    return { ...node, metadata: meta };
-  }
-
-  updateNode(id, data, metaData) {
-    const node = this.nodes.get(id);
-    if (!node) return undefined;
-    const updated = { ...node, ...data, id: node.id, createdAt: node.createdAt, updatedAt: new Date() };
-    this.nodes.set(id, updated);
-    if (metaData) {
-      const em = this.metadata.get(id);
-      if (em) this.metadata.set(id, { ...em, ...metaData, nodeId: id });
-    }
-    return this.getWithMeta(updated);
-  }
-
-  deleteNode(id) {
-    const node = this.nodes.get(id);
-    if (!node) return false;
-    for (const child of Array.from(this.nodes.values()).filter(n => n.parentId === id)) this.deleteNode(child.id);
-    this.nodes.delete(id);
-    this.metadata.delete(id);
-    return true;
-  }
-
-  reorderNodes(parentId, orderedIds) {
-    orderedIds.forEach((nid, i) => {
-      const n = this.nodes.get(nid);
-      if (n && n.parentId === parentId) { n.sortOrder = i; n.updatedAt = new Date(); }
-    });
-  }
+  }));
 }
 
-const storage = new MemStorage();
+async function getNode(id) {
+  const all = await getAllNodes();
+  return all.find(n => n.id === id);
+}
 
-// Routes
-app.get("/api/nodes", (_req, res) => res.json(storage.getAllNodes()));
-app.get("/api/nodes/:id", (req, res) => { const n = storage.getNode(req.params.id); n ? res.json(n) : res.status(404).json({ message: "Not found" }); });
-app.get("/api/nodes/:id/children", (req, res) => { const pid = req.params.id === "root" ? null : req.params.id; res.json(storage.getChildren(pid)); });
-app.post("/api/nodes", (req, res) => { const { metadata, ...data } = req.body; res.status(201).json(storage.createNode(data, metadata || {})); });
-app.patch("/api/nodes/:id", (req, res) => { const { metadata, ...data } = req.body; const n = storage.updateNode(req.params.id, data, metadata); n ? res.json(n) : res.status(404).json({ message: "Not found" }); });
-app.delete("/api/nodes/:id", (req, res) => { storage.deleteNode(req.params.id) ? res.json({ success: true }) : res.status(404).json({ message: "Not found" }); });
-app.post("/api/nodes/:id/reorder", (req, res) => { const pid = req.params.id === "root" ? null : req.params.id; storage.reorderNodes(pid, req.body.orderedIds); res.json({ success: true }); });
-app.post("/api/nodes/:id/publish", (req, res) => { const n = storage.updateNode(req.params.id, { status: "published" }); n ? res.json(n) : res.status(404).json({ message: "Not found" }); });
-app.post("/api/nodes/:id/unpublish", (req, res) => { const n = storage.updateNode(req.params.id, { status: "draft" }); n ? res.json(n) : res.status(404).json({ message: "Not found" }); });
+// ---- PUBLIC API (CORS-enabled) ----
+app.get("/api/public/nodes", async (_req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Cache-Control": "no-cache",
+  });
+  try {
+    const allNodes = await getAllNodes();
+    const published = allNodes
+      .filter(n => n.status === "published")
+      .map(n => ({
+        id: n.id,
+        parentId: n.parentId,
+        type: n.type,
+        title: n.title,
+        sortOrder: n.sortOrder,
+        metadata: n.metadata ? {
+          coverImage: n.metadata.coverImageUrl || undefined,
+          coverImageUrl: n.metadata.coverImageUrl || undefined,
+          artistName: n.metadata.artistName || undefined,
+          albumName: n.metadata.albumName || undefined,
+          audioUrl: n.metadata.audioUrl || undefined,
+          videoUrl: n.metadata.videoUrl || undefined,
+          thumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+          videoThumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+          linkUrl: n.metadata.linkUrl || undefined,
+          url: n.metadata.linkUrl || undefined,
+          duration: n.metadata.duration || undefined,
+          bodyText: n.metadata.bodyText || undefined,
+          previewImage: n.metadata.previewImage || undefined,
+          photos: n.metadata.photos || undefined,
+          links: n.metadata.links || undefined,
+          songIds: n.metadata.songIds || undefined,
+          coverImages: n.metadata.coverImages || undefined,
+        } : {},
+      }));
+    res.json(published);
+  } catch (err) {
+    console.error("[public/nodes] Error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.options("/api/public/nodes", (_req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  });
+  res.sendStatus(204);
+});
+
+// ---- ADMIN API ----
+app.get("/api/nodes", async (_req, res) => {
+  try {
+    res.json(await getAllNodes());
+  } catch (err) {
+    console.error("[nodes] Error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/nodes/:id", async (req, res) => {
+  try {
+    const n = await getNode(req.params.id);
+    n ? res.json(n) : res.status(404).json({ message: "Not found" });
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/nodes/:id/children", async (req, res) => {
+  try {
+    const parentId = req.params.id === "root" ? null : req.params.id;
+    const all = await getAllNodes();
+    const children = all.filter(n => n.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
+    res.json(children);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/nodes", async (req, res) => {
+  try {
+    const { metadata = {}, ...data } = req.body;
+    const { rows: [node] } = await pool.query(
+      `INSERT INTO menu_nodes (parent_id, type, title, sort_order, status) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [data.parentId || null, data.type, data.title, data.sortOrder ?? 0, data.status || "draft"]
+    );
+    await pool.query(
+      `INSERT INTO node_metadata (node_id, cover_image_url, artist_name, album_name, audio_url, video_url, video_thumbnail_url, link_url, duration, body_text, preview_image, photos, links, song_ids, cover_images) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      [node.id, metadata.coverImageUrl||null, metadata.artistName||null, metadata.albumName||null, metadata.audioUrl||null, metadata.videoUrl||null, metadata.videoThumbnailUrl||null, metadata.linkUrl||null, metadata.duration||null, metadata.bodyText||null, metadata.previewImage||null, metadata.photos ? JSON.stringify(metadata.photos) : null, metadata.links ? JSON.stringify(metadata.links) : null, metadata.songIds ? JSON.stringify(metadata.songIds) : null, metadata.coverImages ? JSON.stringify(metadata.coverImages) : null]
+    );
+    const created = await getNode(node.id);
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("[create] Error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.patch("/api/nodes/:id", async (req, res) => {
+  try {
+    const { metadata, ...data } = req.body;
+    const sets = [];
+    const vals = [];
+    let idx = 1;
+    if (data.title !== undefined) { sets.push(`title = $${idx++}`); vals.push(data.title); }
+    if (data.parentId !== undefined) { sets.push(`parent_id = $${idx++}`); vals.push(data.parentId); }
+    if (data.type !== undefined) { sets.push(`type = $${idx++}`); vals.push(data.type); }
+    if (data.sortOrder !== undefined) { sets.push(`sort_order = $${idx++}`); vals.push(data.sortOrder); }
+    if (data.status !== undefined) { sets.push(`status = $${idx++}`); vals.push(data.status); }
+    sets.push(`updated_at = NOW()`);
+    if (sets.length > 1 || data.status !== undefined) {
+      vals.push(req.params.id);
+      await pool.query(`UPDATE menu_nodes SET ${sets.join(", ")} WHERE id = $${idx}`, vals);
+    }
+    if (metadata) {
+      const mSets = [];
+      const mVals = [];
+      let mi = 1;
+      for (const [key, val] of Object.entries(metadata)) {
+        const col = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+        if (["photos", "links", "song_ids", "cover_images"].includes(col)) {
+          mSets.push(`${col} = $${mi++}`);
+          mVals.push(val ? JSON.stringify(val) : null);
+        } else {
+          mSets.push(`${col} = $${mi++}`);
+          mVals.push(val ?? null);
+        }
+      }
+      if (mSets.length > 0) {
+        mVals.push(req.params.id);
+        await pool.query(`UPDATE node_metadata SET ${mSets.join(", ")} WHERE node_id = $${mi}`, mVals);
+      }
+    }
+    const updated = await getNode(req.params.id);
+    updated ? res.json(updated) : res.status(404).json({ message: "Not found" });
+  } catch (err) {
+    console.error("[update] Error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.delete("/api/nodes/:id", async (req, res) => {
+  try {
+    // Recursively find and delete children
+    async function deleteRecursive(id) {
+      const { rows: children } = await pool.query(`SELECT id FROM menu_nodes WHERE parent_id = $1`, [id]);
+      for (const child of children) await deleteRecursive(child.id);
+      await pool.query(`DELETE FROM node_metadata WHERE node_id = $1`, [id]);
+      await pool.query(`DELETE FROM menu_nodes WHERE id = $1`, [id]);
+    }
+    await deleteRecursive(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[delete] Error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/nodes/:id/reorder", async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    for (let i = 0; i < orderedIds.length; i++) {
+      await pool.query(`UPDATE menu_nodes SET sort_order = $1, updated_at = NOW() WHERE id = $2`, [i, orderedIds[i]]);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/nodes/:id/publish", async (req, res) => {
+  try {
+    await pool.query(`UPDATE menu_nodes SET status = 'published', updated_at = NOW() WHERE id = $1`, [req.params.id]);
+    const n = await getNode(req.params.id);
+    n ? res.json(n) : res.status(404).json({ message: "Not found" });
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/nodes/:id/unpublish", async (req, res) => {
+  try {
+    await pool.query(`UPDATE menu_nodes SET status = 'draft', updated_at = NOW() WHERE id = $1`, [req.params.id]);
+    const n = await getNode(req.params.id);
+    n ? res.json(n) : res.status(404).json({ message: "Not found" });
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 app.post("/api/upload/audio", upload.single("file"), (req, res) => { if (!req.file) return res.status(400).json({ message: "No file" }); res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` }); });
 app.post("/api/upload/image", upload.single("file"), (req, res) => { if (!req.file) return res.status(400).json({ message: "No file" }); res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` }); });
 app.post("/api/upload/video", upload.single("file"), (req, res) => { if (!req.file) return res.status(400).json({ message: "No file" }); res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` }); });
