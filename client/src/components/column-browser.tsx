@@ -1,0 +1,454 @@
+import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  ChevronRight,
+  Folder,
+  Music,
+  Disc3,
+  ListMusic,
+  Image,
+  Video,
+  Link2,
+  FileText,
+  Settings,
+  Gamepad2,
+  Layers,
+  Plus,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { MenuNodeWithMetadata } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { NodeEditor } from "@/components/node-editor";
+
+const TYPE_ICONS: Record<string, any> = {
+  folder: Folder,
+  song: Music,
+  album: Disc3,
+  playlist: ListMusic,
+  photo_album: Image,
+  video: Video,
+  link: Link2,
+  text: FileText,
+  settings: Settings,
+  game: Gamepad2,
+  cover_flow_home: Layers,
+  cover_flow_music: Layers,
+};
+
+const TYPE_ICON_STYLE: Record<string, string> = {
+  folder:          "bg-amber-100   text-amber-600",
+  song:            "bg-emerald-100 text-emerald-600",
+  album:           "bg-purple-100  text-purple-600",
+  playlist:        "bg-blue-100    text-blue-600",
+  photo_album:     "bg-pink-100    text-pink-600",
+  video:           "bg-red-100     text-red-600",
+  link:            "bg-cyan-100    text-cyan-600",
+  text:            "bg-slate-100   text-slate-600",
+  settings:        "bg-gray-100    text-gray-500",
+  game:            "bg-orange-100  text-orange-600",
+  cover_flow_home: "bg-indigo-100  text-indigo-600",
+  cover_flow_music:"bg-violet-100  text-violet-600",
+};
+
+const FOLDER_TYPES = new Set(["folder", "album", "playlist", "photo_album"]);
+
+function isContainerNode(node: MenuNodeWithMetadata, nodes: MenuNodeWithMetadata[]): boolean {
+  return FOLDER_TYPES.has(node.type) || nodes.some((n) => n.parentId === node.id);
+}
+
+// ── Single item row inside a column ──────────────────────────────────────────
+function ColumnItem({
+  node,
+  nodes,
+  isSelected,
+  isInPath,
+  isSiblingDragOver,
+  isFolderDropTarget,
+  onClick,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  node: MenuNodeWithMetadata;
+  nodes: MenuNodeWithMetadata[];
+  isSelected: boolean;
+  isInPath: boolean;
+  isSiblingDragOver: boolean;
+  isFolderDropTarget: boolean;
+  onClick: () => void;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+}) {
+  const Icon = TYPE_ICONS[node.type] || FileText;
+  const iconStyle = TYPE_ICON_STYLE[node.type] || "bg-gray-100 text-gray-500";
+  const nodeIsContainer = isContainerNode(node, nodes);
+  const isPublished = node.status === "published";
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none group transition-colors duration-75",
+        isSelected
+          ? "bg-primary text-primary-foreground"
+          : isInPath
+          ? "bg-primary/10 text-foreground"
+          : "text-foreground/80 hover:bg-muted/70 hover:text-foreground",
+        isSiblingDragOver && "border-t-2 border-primary/60",
+        isFolderDropTarget && !isSelected && "bg-primary/15 ring-2 ring-inset ring-primary/40"
+      )}
+      onClick={onClick}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <div className={cn(
+        "w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors",
+        isSelected ? "bg-white/20" : iconStyle
+      )}>
+        <Icon className="h-3.5 w-3.5" />
+      </div>
+
+      <span className="truncate flex-1 text-sm font-medium">{node.title}</span>
+
+      {isPublished && !isSelected && (
+        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" title="Published" />
+      )}
+
+      {nodeIsContainer && (
+        <ChevronRight className={cn(
+          "h-3.5 w-3.5 flex-shrink-0",
+          isSelected ? "text-primary-foreground/70" : "text-muted-foreground/50"
+        )} />
+      )}
+    </div>
+  );
+}
+
+// ── A single column panel ─────────────────────────────────────────────────────
+function BrowserColumn({
+  parentId,
+  nodes,
+  columnPath,
+  selectedNodeId,
+  onClickNode,
+  onAddNode,
+  dragState,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDropOnBackground,
+}: {
+  parentId: string | null;
+  nodes: MenuNodeWithMetadata[];
+  columnPath: string[];
+  selectedNodeId: string | null;
+  onClickNode: (node: MenuNodeWithMetadata) => void;
+  onAddNode: (parentId: string | null) => void;
+  dragState: { dragOverId: string | null; dropFolderId: string | null };
+  onDragStart: (e: React.DragEvent, nodeId: string) => void;
+  onDragOver: (e: React.DragEvent, nodeId: string) => void;
+  onDragLeave: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent, nodeId: string) => void;
+  onDropOnBackground: (e: React.DragEvent, parentId: string | null) => void;
+}) {
+  const items = nodes
+    .filter((n) => n.parentId === parentId)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const handleBackgroundDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleBackgroundDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    onDropOnBackground(e, parentId);
+  };
+
+  return (
+    <div
+      className="flex flex-col w-52 shrink-0 border-r border-border bg-background h-full overflow-hidden"
+      onDragOver={handleBackgroundDragOver}
+      onDrop={handleBackgroundDrop}
+    >
+      {/* Column header with add button */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30 shrink-0">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          {parentId
+            ? (nodes.find((n) => n.id === parentId)?.title ?? "Items")
+            : "Library"}
+        </span>
+        <button
+          onClick={() => onAddNode(parentId)}
+          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          title="Add item"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Items list */}
+      <div className="flex-1 overflow-y-auto py-1">
+        {items.length === 0 ? (
+          <div className="px-3 py-4 text-xs text-muted-foreground/60 text-center">
+            Empty
+          </div>
+        ) : (
+          items.map((node) => (
+            <ColumnItem
+              key={node.id}
+              node={node}
+              nodes={nodes}
+              isSelected={node.id === selectedNodeId}
+              isInPath={columnPath.includes(node.id)}
+              isSiblingDragOver={node.id === dragState.dragOverId}
+              isFolderDropTarget={node.id === dragState.dropFolderId}
+              onClick={() => onClickNode(node)}
+              onDragStart={(e) => onDragStart(e, node.id)}
+              onDragOver={(e) => onDragOver(e, node.id)}
+              onDragLeave={onDragLeave}
+              onDrop={(e) => onDrop(e, node.id)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main ColumnBrowser component ─────────────────────────────────────────────
+export function ColumnBrowser({
+  nodes,
+  selectedNodeId,
+  onSelectNode,
+  onAddNode,
+}: {
+  nodes: MenuNodeWithMetadata[];
+  selectedNodeId: string | null;
+  onSelectNode: (id: string) => void;
+  onAddNode: (parentId: string | null) => void;
+}) {
+  // columnPath: array of folder IDs that are "open" — drives which columns show
+  const [columnPath, setColumnPath] = useState<string[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Drag state
+  const [dragNodeId, setDragNodeId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dropFolderId, setDropFolderId] = useState<string | null>(null);
+
+  // Auto-scroll right when new column opens
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ left: scrollRef.current.scrollWidth, behavior: "smooth" });
+    }
+  }, [columnPath.length]);
+
+  const handleClickNode = useCallback((node: MenuNodeWithMetadata) => {
+    const nodeIsContainer = isContainerNode(node, nodes);
+    onSelectNode(node.id);
+
+    if (nodeIsContainer) {
+      // Find where this node sits in the current path
+      const indexInPath = columnPath.indexOf(node.id);
+      if (indexInPath >= 0) {
+        // Already in path — truncate everything after it
+        setColumnPath(columnPath.slice(0, indexInPath + 1));
+      } else {
+        // Find which column this node belongs to (its parent is the last entry in some prefix of columnPath)
+        const parentId = node.parentId;
+        const parentIndexInPath = parentId ? columnPath.indexOf(parentId) : -1;
+
+        if (parentIndexInPath >= 0) {
+          // Parent is in path — replace everything after parent with this node
+          setColumnPath([...columnPath.slice(0, parentIndexInPath + 1), node.id]);
+        } else if (!parentId) {
+          // Root node — reset to just this node
+          setColumnPath([node.id]);
+        } else {
+          // Node is deeper; just append (shouldn't normally happen with proper navigation)
+          setColumnPath([...columnPath, node.id]);
+        }
+      }
+    } else {
+      // Leaf node — don't change columns, just select it
+      // Trim path to the node's parent depth so highlight is correct
+      const parentId = node.parentId;
+      if (parentId) {
+        const parentIdx = columnPath.indexOf(parentId);
+        if (parentIdx >= 0) {
+          setColumnPath(columnPath.slice(0, parentIdx + 1));
+        } else if (!columnPath.includes(parentId)) {
+          // Parent not in path — keep current path unchanged
+        }
+      } else {
+        // Root leaf — clear column path
+        setColumnPath([]);
+      }
+    }
+  }, [nodes, columnPath, onSelectNode]);
+
+  // ── Drag handlers ──────────────────────────────────────────────────────────
+
+  const handleDragStart = useCallback((e: React.DragEvent, nodeId: string) => {
+    e.dataTransfer.setData("text/plain", nodeId);
+    setDragNodeId(nodeId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, nodeId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const sourceId = e.dataTransfer.getData("text/plain") || dragNodeId;
+    const sourceNode = nodes.find((n) => n.id === sourceId);
+    const targetNode = nodes.find((n) => n.id === nodeId);
+    if (!sourceNode || !targetNode || sourceId === nodeId) return;
+
+    const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === nodeId);
+    const crossParent = sourceNode.parentId !== targetNode.parentId;
+
+    if (targetIsFolder && crossParent) {
+      setDropFolderId(nodeId);
+      setDragOverId(null);
+    } else if (!crossParent) {
+      setDragOverId(nodeId);
+      setDropFolderId(null);
+    } else {
+      setDragOverId(nodeId);
+      setDropFolderId(null);
+    }
+  }, [nodes, dragNodeId]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDropFolderId(null);
+      setDragOverId(null);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverId(null);
+    setDropFolderId(null);
+    const sourceId = e.dataTransfer.getData("text/plain");
+    if (!sourceId || sourceId === targetId) return;
+
+    const sourceNode = nodes.find((n) => n.id === sourceId);
+    const targetNode = nodes.find((n) => n.id === targetId);
+    if (!sourceNode || !targetNode) return;
+
+    const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === targetId);
+    const crossParent = sourceNode.parentId !== targetNode.parentId;
+
+    if (targetIsFolder && crossParent) {
+      const targetChildren = nodes
+        .filter((n) => n.parentId === targetId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const newSortOrder = targetChildren.length > 0
+        ? targetChildren[targetChildren.length - 1].sortOrder + 1
+        : 0;
+      await apiRequest("PATCH", `/api/nodes/${sourceId}`, {
+        parentId: targetId,
+        sortOrder: newSortOrder,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+    } else if (sourceNode.parentId === targetNode.parentId) {
+      const siblings = nodes
+        .filter((n) => n.parentId === sourceNode.parentId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const orderedIds = siblings.map((n) => n.id);
+      const fromIndex = orderedIds.indexOf(sourceId);
+      const toIndex = orderedIds.indexOf(targetId);
+      orderedIds.splice(fromIndex, 1);
+      orderedIds.splice(toIndex, 0, sourceId);
+      const parentParam = sourceNode.parentId || "root";
+      await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+    }
+  }, [nodes]);
+
+  // Drop on column background → move to that column's parent (append to end)
+  const handleDropOnBackground = useCallback(async (e: React.DragEvent, targetParentId: string | null) => {
+    e.preventDefault();
+    setDragOverId(null);
+    setDropFolderId(null);
+    const sourceId = e.dataTransfer.getData("text/plain");
+    if (!sourceId) return;
+    const sourceNode = nodes.find((n) => n.id === sourceId);
+    if (!sourceNode) return;
+    if (sourceNode.parentId === targetParentId) return; // already here
+
+    const targetChildren = nodes
+      .filter((n) => n.parentId === targetParentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const newSortOrder = targetChildren.length > 0
+      ? targetChildren[targetChildren.length - 1].sortOrder + 1
+      : 0;
+    await apiRequest("PATCH", `/api/nodes/${sourceId}`, {
+      parentId: targetParentId,
+      sortOrder: newSortOrder,
+    });
+    queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+  }, [nodes]);
+
+  // Build column list: [null (root), ...columnPath]
+  const columnParents: (string | null)[] = [null, ...columnPath];
+
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+
+  const dragState = { dragOverId, dropFolderId };
+
+  return (
+    <div className="flex h-full overflow-hidden">
+      {/* Scrollable columns area */}
+      <div
+        ref={scrollRef}
+        className="flex flex-1 overflow-x-auto overflow-y-hidden"
+        style={{ minWidth: 0 }}
+      >
+        {columnParents.map((parentId) => (
+          <BrowserColumn
+            key={parentId ?? "__root__"}
+            parentId={parentId}
+            nodes={nodes}
+            columnPath={columnPath}
+            selectedNodeId={selectedNodeId}
+            onClickNode={handleClickNode}
+            onAddNode={onAddNode}
+            dragState={dragState}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onDropOnBackground={handleDropOnBackground}
+          />
+        ))}
+        {/* Filler so the last column isn't flush against the editor */}
+        <div className="w-4 shrink-0" />
+      </div>
+
+      {/* Editor pane */}
+      <div className="w-[420px] min-w-[320px] shrink-0 border-l border-border flex flex-col overflow-hidden">
+        {selectedNode ? (
+          <NodeEditor node={selectedNode} allNodes={nodes} onSelectNode={onSelectNode} />
+        ) : (
+          <div className="flex-1 flex items-center justify-center p-8 text-center">
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
+                <Layers className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Select an item to edit it
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

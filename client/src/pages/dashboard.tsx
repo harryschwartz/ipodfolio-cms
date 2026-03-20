@@ -3,14 +3,25 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, ChevronLeft, Plus, Sparkles } from "lucide-react";
+import { ExternalLink, ChevronLeft, Plus, Sparkles, List, Columns2 } from "lucide-react";
 import { ContentTree } from "@/components/content-tree";
 import { NodeEditor } from "@/components/node-editor";
 import { AddNodeDialog } from "@/components/add-node-dialog";
+import { ColumnBrowser } from "@/components/column-browser";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
 type MobileView = "tree" | "editor";
+type ViewMode = "list" | "column";
+
+function getStoredViewMode(): ViewMode {
+  try {
+    const v = localStorage.getItem("cms-view-mode");
+    if (v === "list" || v === "column") return v;
+  } catch {}
+  return "list";
+}
 
 function IpodIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
@@ -31,11 +42,56 @@ function IpodIcon({ size = 20, className = "" }: { size?: number; className?: st
   );
 }
 
-function SidebarHeader({ onPreview }: { onPreview: () => void }) {
+function ViewToggle({
+  viewMode,
+  onChange,
+}: {
+  viewMode: ViewMode;
+  onChange: (v: ViewMode) => void;
+}) {
+  return (
+    <div className="flex items-center bg-white/15 rounded-lg p-0.5 gap-0.5">
+      <button
+        onClick={() => onChange("list")}
+        title="List view"
+        className={cn(
+          "w-7 h-7 rounded-md flex items-center justify-center transition-all",
+          viewMode === "list"
+            ? "bg-white text-indigo-600 shadow-sm"
+            : "text-white/70 hover:text-white hover:bg-white/10"
+        )}
+      >
+        <List className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={() => onChange("column")}
+        title="Column view"
+        className={cn(
+          "w-7 h-7 rounded-md flex items-center justify-center transition-all",
+          viewMode === "column"
+            ? "bg-white text-indigo-600 shadow-sm"
+            : "text-white/70 hover:text-white hover:bg-white/10"
+        )}
+      >
+        <Columns2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function SidebarHeader({
+  onPreview,
+  viewMode,
+  onViewModeChange,
+}: {
+  onPreview: () => void;
+  viewMode: ViewMode;
+  onViewModeChange: (v: ViewMode) => void;
+}) {
   return (
     <div className="shrink-0 bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 px-4 pt-5 pb-4">
       {/* Top row */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-sm">
             <IpodIcon size={17} className="text-white" />
@@ -55,10 +111,60 @@ function SidebarHeader({ onPreview }: { onPreview: () => void }) {
         </button>
       </div>
 
-      {/* Section label */}
-      <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">
-        Content
-      </p>
+      {/* Second row: view toggle + section label */}
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">
+          Content
+        </p>
+        <ViewToggle viewMode={viewMode} onChange={onViewModeChange} />
+      </div>
+    </div>
+  );
+}
+
+// Top bar used in column view (replaces sidebar header)
+function ColumnTopBar({
+  onPreview,
+  viewMode,
+  onViewModeChange,
+  onAddNode,
+}: {
+  onPreview: () => void;
+  viewMode: ViewMode;
+  onViewModeChange: (v: ViewMode) => void;
+  onAddNode: () => void;
+}) {
+  return (
+    <div className="shrink-0 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-600 px-4 py-3 flex items-center gap-3 shadow-md">
+      <div className="flex items-center gap-2.5 mr-auto">
+        <div className="w-7 h-7 rounded-xl bg-white/20 flex items-center justify-center">
+          <IpodIcon size={15} className="text-white" />
+        </div>
+        <div>
+          <h1 className="text-sm font-bold leading-tight text-white tracking-tight">iPodfolio CMS</h1>
+        </div>
+      </div>
+
+      <ViewToggle viewMode={viewMode} onChange={onViewModeChange} />
+
+      <Button
+        data-testid="button-add-root-node"
+        onClick={onAddNode}
+        size="sm"
+        className="gap-1.5 h-8 text-xs font-semibold bg-white/20 hover:bg-white/30 text-white border-0 shadow-sm transition-all"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        New
+      </Button>
+
+      <button
+        onClick={onPreview}
+        data-testid="button-preview-ipod"
+        className="flex items-center gap-1.5 text-xs text-white/80 hover:text-white bg-white/15 hover:bg-white/25 rounded-full px-3 py-1.5 transition-all font-medium"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Preview
+      </button>
     </div>
   );
 }
@@ -68,6 +174,7 @@ export default function Dashboard() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addParentId, setAddParentId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<MobileView>("tree");
+  const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
   const isMobile = useIsMobile();
 
   const { data: nodes, isLoading } = useQuery<MenuNodeWithMetadata[]>({
@@ -84,6 +191,11 @@ export default function Dashboard() {
   const handleAddNode = (parentId: string | null) => {
     setAddParentId(parentId);
     setAddDialogOpen(true);
+  };
+
+  const handleViewModeChange = (v: ViewMode) => {
+    setViewMode(v);
+    try { localStorage.setItem("cms-view-mode", v); } catch {}
   };
 
   // ─── MOBILE LAYOUT ───
@@ -172,12 +284,62 @@ export default function Dashboard() {
     );
   }
 
-  // ─── DESKTOP LAYOUT ───
+  // ─── DESKTOP — COLUMN VIEW ───
+  if (viewMode === "column") {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden bg-background" data-testid="dashboard">
+        <ColumnTopBar
+          onPreview={() => window.open("https://ipodfolio.vercel.app", "_blank")}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+          onAddNode={() => handleAddNode(null)}
+        />
+
+        <div className="flex-1 overflow-hidden">
+          {isLoading ? (
+            <div className="flex gap-px h-full">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="w-52 border-r border-border p-3 space-y-1.5">
+                  {Array.from({ length: 8 }).map((_, j) => (
+                    <Skeleton key={j} className="h-9 w-full rounded-lg" />
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <ColumnBrowser
+              nodes={nodes || []}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={handleSelectNode}
+              onAddNode={handleAddNode}
+            />
+          )}
+        </div>
+
+        <AddNodeDialog
+          open={addDialogOpen}
+          onOpenChange={setAddDialogOpen}
+          parentId={addParentId}
+          allNodes={nodes || []}
+          onNodeCreated={(id) => {
+            setSelectedNodeId(id);
+            setAddDialogOpen(false);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // ─── DESKTOP — LIST VIEW ───
   return (
     <div className="flex h-screen overflow-hidden bg-background" data-testid="dashboard">
       {/* Sidebar */}
       <aside className="w-[288px] min-w-[288px] border-r border-border bg-sidebar flex flex-col shadow-lg">
-        <SidebarHeader onPreview={() => window.open("https://ipodfolio.vercel.app", "_blank")} />
+        <SidebarHeader
+          onPreview={() => window.open("https://ipodfolio.vercel.app", "_blank")}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+        />
 
         {/* Add Collection Button */}
         <div className="px-3 pt-3 pb-1 shrink-0">
