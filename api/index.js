@@ -235,6 +235,22 @@ app.post("/api/nodes/:id/reorder", async (req, res) => {
   }
 });
 
+app.post("/api/nodes/:id/move", async (req, res) => {
+  try {
+    const { newParentId, sortOrder } = req.body;
+    const parentVal = newParentId || null;
+    await pool.query(
+      `UPDATE menu_nodes SET parent_id = $1, sort_order = $2, updated_at = NOW() WHERE id = $3`,
+      [parentVal, sortOrder ?? 0, req.params.id]
+    );
+    const updated = await getNode(req.params.id);
+    updated ? res.json(updated) : res.status(404).json({ message: "Not found" });
+  } catch (err) {
+    console.error("[move] Error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 app.post("/api/nodes/:id/publish", async (req, res) => {
   try {
     await pool.query(`UPDATE menu_nodes SET status = 'published', updated_at = NOW() WHERE id = $1`, [req.params.id]);
