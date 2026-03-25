@@ -222,14 +222,24 @@ export function NodeEditor({
   });
 
   const handleImageUpload = async (file: File, setter: (url: string) => void) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(
-      `${"__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__"}/api/upload/image`,
-      { method: "POST", body: formData }
-    );
-    const data = await res.json();
-    setter(data.url);
+    const SUPABASE_URL = "https://xtjjavrixvnwoulgebqp.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0amphdnJpeHZud291bGdlYnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjgxNjIsImV4cCI6MjA4OTU0NDE2Mn0.aSL3bi4__sS1OaeF2_MkTMrOGfHmnHBKxhKP8zd0qAQ";
+    const ext = file.name.split(".").pop();
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/cms-assets/${path}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": file.type,
+        "x-upsert": "true",
+      },
+      body: file,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Upload failed: ${err}`);
+    }
+    setter(`${SUPABASE_URL}/storage/v1/object/public/cms-assets/${path}`);
   };
 
   const handleAudioUpload = async (file: File) => {
@@ -643,7 +653,9 @@ export function NodeEditor({
 // Need Settings icon inside the read-only section
 import { Settings } from "lucide-react";
 
-function ImageUploader({ value, onChange, onUpload }: { value: string; onChange: (url: string) => void; onUpload: (file: File) => void }) {
+function ImageUploader({ value, onChange, onUpload }: { value: string; onChange: (url: string) => void; onUpload: (file: File) => Promise<void> }) {
+  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
   return (
     <div>
       {value ? (
@@ -656,14 +668,20 @@ function ImageUploader({ value, onChange, onUpload }: { value: string; onChange:
           </div>
         </div>
       ) : (
-        <label className="cursor-pointer block">
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); }} />
+        <label className={uploading ? "cursor-wait block" : "cursor-pointer block"}>
+          <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (!f) return;
+            setUploading(true);
+            try { await onUpload(f); } catch (err: any) { toast({ title: "Upload failed", description: err.message, variant: "destructive" }); }
+            finally { setUploading(false); }
+          }} />
           <div className="w-full rounded-xl border-2 border-dashed border-border/70 bg-muted/20 flex flex-col items-center gap-2.5 py-10 hover:border-primary/40 hover:bg-primary/5 transition-all group">
             <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/10 transition-colors">
               <Upload className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">Click to upload</p>
+              <p className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">{uploading ? "Uploading…" : "Click to upload"}</p>
               <p className="text-xs text-muted-foreground/60 mt-0.5">PNG, JPG, GIF, WebP</p>
             </div>
           </div>
