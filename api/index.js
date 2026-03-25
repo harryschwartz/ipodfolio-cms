@@ -114,6 +114,57 @@ app.options("/api/public/nodes", (_req, res) => {
   res.sendStatus(204);
 });
 
+// ---- PREVIEW API (CORS-enabled, all nodes including drafts) ----
+app.get("/api/preview/nodes", async (_req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Cache-Control": "no-cache",
+  });
+  try {
+    const allNodes = await getAllNodes();
+    res.json(allNodes.map(n => ({
+      id: n.id,
+      parentId: n.parentId,
+      type: n.type,
+      title: n.title,
+      sortOrder: n.sortOrder,
+      metadata: n.metadata ? {
+        coverImage: n.metadata.coverImageUrl || undefined,
+        coverImageUrl: n.metadata.coverImageUrl || undefined,
+        artistName: n.metadata.artistName || undefined,
+        albumName: n.metadata.albumName || undefined,
+        audioUrl: n.metadata.audioUrl || undefined,
+        videoUrl: n.metadata.videoUrl || undefined,
+        thumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+        videoThumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+        linkUrl: n.metadata.linkUrl || undefined,
+        url: n.metadata.linkUrl || undefined,
+        duration: n.metadata.duration || undefined,
+        bodyText: n.metadata.bodyText || undefined,
+        previewImage: n.metadata.previewImage || undefined,
+        photos: n.metadata.photos || undefined,
+        links: n.metadata.links || undefined,
+        songIds: n.metadata.songIds || undefined,
+        coverImages: n.metadata.coverImages || undefined,
+      } : {},
+    })));
+  } catch (err) {
+    console.error("[preview/nodes] Error:", err.message);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.options("/api/preview/nodes", (_req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  });
+  res.sendStatus(204);
+});
+
 // ---- ADMIN API ----
 app.get("/api/nodes", async (_req, res) => {
   try {
