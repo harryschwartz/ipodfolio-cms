@@ -142,6 +142,7 @@ export function NodeEditor({
   const [bodyText, setBodyText] = useState(node.metadata?.bodyText || "");
   const [coverImageUrl, setCoverImageUrl] = useState(node.metadata?.coverImageUrl || "");
   const [previewImage, setPreviewImage] = useState(node.metadata?.previewImage || "");
+  const [splitScreen, setSplitScreen] = useState(node.metadata?.splitScreen ?? false);
   const [videoThumbnailUrl, setVideoThumbnailUrl] = useState(node.metadata?.videoThumbnailUrl || "");
   const [duration, setDuration] = useState(node.metadata?.duration || 0);
   const [links, setLinks] = useState<Array<{ label: string; url: string }>>(
@@ -163,6 +164,7 @@ export function NodeEditor({
     setBodyText(node.metadata?.bodyText || "");
     setCoverImageUrl(node.metadata?.coverImageUrl || "");
     setPreviewImage(node.metadata?.previewImage || "");
+    setSplitScreen(node.metadata?.splitScreen ?? false);
     setVideoThumbnailUrl(node.metadata?.videoThumbnailUrl || "");
     setDuration(node.metadata?.duration || 0);
     setLinks((node.metadata?.links as any) || []);
@@ -182,6 +184,7 @@ export function NodeEditor({
           bodyText: bodyText || null,
           coverImageUrl: coverImageUrl || null,
           previewImage: previewImage || null,
+          splitScreen: splitScreen ?? null,
           videoThumbnailUrl: videoThumbnailUrl || null,
           duration: duration || null,
           links: links.length > 0 ? links : null,
@@ -467,6 +470,19 @@ export function NodeEditor({
                   <SectionHeader>Preview Image</SectionHeader>
                   <FieldGroup>
                     <ImageUploader value={previewImage} onChange={setPreviewImage} onUpload={(f) => handleImageUpload(f, setPreviewImage)} />
+                  </FieldGroup>
+                  <SectionHeader>Display</SectionHeader>
+                  <FieldGroup>
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        id="split-screen"
+                        checked={splitScreen}
+                        onCheckedChange={setSplitScreen}
+                      />
+                      <Label htmlFor="split-screen" className="text-sm font-semibold">
+                        Split screen layout
+                      </Label>
+                    </div>
                   </FieldGroup>
                 </div>
               )}

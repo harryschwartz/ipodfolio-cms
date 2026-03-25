@@ -51,6 +51,7 @@ export async function registerRoutes(
               duration: n.metadata.duration || undefined,
               bodyText: n.metadata.bodyText || undefined,
               previewImage: n.metadata.previewImage || undefined,
+              splitScreen: n.metadata.splitScreen ?? undefined,
               photos: n.metadata.photos || undefined,
               links: n.metadata.links || undefined,
               songIds: n.metadata.songIds || undefined,
@@ -63,6 +64,56 @@ export async function registerRoutes(
 
   // Handle CORS preflight for public API
   app.options("/api/public/nodes", (_req, res) => {
+    res.set({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    });
+    res.sendStatus(204);
+  });
+
+  // ─── PREVIEW API (CORS-enabled, all nodes including drafts) ───
+  app.get("/api/preview/nodes", async (_req, res) => {
+    res.set({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Cache-Control": "no-cache",
+    });
+    const allNodes = await storage.getAllNodes();
+    res.json(allNodes.map((n) => ({
+      id: n.id,
+      parentId: n.parentId,
+      type: n.type,
+      title: n.title,
+      sortOrder: n.sortOrder,
+      metadata: n.metadata
+        ? {
+            coverImage: n.metadata.coverImageUrl || undefined,
+            coverImageUrl: n.metadata.coverImageUrl || undefined,
+            artistName: n.metadata.artistName || undefined,
+            albumName: n.metadata.albumName || undefined,
+            audioUrl: n.metadata.audioUrl || undefined,
+            videoUrl: n.metadata.videoUrl || undefined,
+            thumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+            videoThumbnailUrl: n.metadata.videoThumbnailUrl || undefined,
+            linkUrl: n.metadata.linkUrl || undefined,
+            url: n.metadata.linkUrl || undefined,
+            duration: n.metadata.duration || undefined,
+            bodyText: n.metadata.bodyText || undefined,
+            previewImage: n.metadata.previewImage || undefined,
+            splitScreen: n.metadata.splitScreen ?? undefined,
+            photos: n.metadata.photos || undefined,
+            links: n.metadata.links || undefined,
+            songIds: n.metadata.songIds || undefined,
+            coverImages: n.metadata.coverImages || undefined,
+          }
+        : {},
+    })));
+  });
+
+  // Handle CORS preflight for preview API
+  app.options("/api/preview/nodes", (_req, res) => {
     res.set({
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",

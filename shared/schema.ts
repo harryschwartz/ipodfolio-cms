@@ -26,6 +26,7 @@ export const nodeMetadata = pgTable("node_metadata", {
   duration: integer("duration"),
   bodyText: text("body_text"),
   previewImage: text("preview_image"),
+  splitScreen: boolean("split_screen"),
   photos: jsonb("photos").$type<Array<{ url: string; caption?: string; sortOrder: number }>>(),
   links: jsonb("links").$type<Array<{ label: string; url: string }>>(),
   songIds: jsonb("song_ids").$type<string[]>(),

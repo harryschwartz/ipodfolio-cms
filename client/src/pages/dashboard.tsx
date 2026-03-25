@@ -230,7 +230,7 @@ export default function Dashboard() {
               <Plus className="h-4 w-4" />
             </button>
             <button
-              onClick={() => window.open("https://ipodfolio.vercel.app", "_blank")}
+              onClick={() => window.open("https://ipodfolio.vercel.app?preview=true", "_blank")}
               data-testid="button-preview-ipod"
               className="flex items-center gap-1.5 text-xs text-white/80 hover:text-white bg-white/15 rounded-full px-3 py-1.5 transition-all"
             >
@@ -289,7 +289,7 @@ export default function Dashboard() {
     return (
       <div className="flex flex-col h-screen overflow-hidden bg-background" data-testid="dashboard">
         <ColumnTopBar
-          onPreview={() => window.open("https://ipodfolio.vercel.app", "_blank")}
+          onPreview={() => window.open("https://ipodfolio.vercel.app?preview=true", "_blank")}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           onAddNode={() => handleAddNode(null)}
@@ -336,7 +336,7 @@ export default function Dashboard() {
       {/* Sidebar */}
       <aside className="w-[288px] min-w-[288px] border-r border-border bg-sidebar flex flex-col shadow-lg">
         <SidebarHeader
-          onPreview={() => window.open("https://ipodfolio.vercel.app", "_blank")}
+          onPreview={() => window.open("https://ipodfolio.vercel.app?preview=true", "_blank")}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
         />
