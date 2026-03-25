@@ -20,7 +20,7 @@ async function getAllNodes() {
     SELECT n.*, 
       m.id as meta_id, m.cover_image_url, m.artist_name, m.album_name, m.audio_url, 
       m.video_url, m.video_thumbnail_url, m.link_url, m.duration, m.body_text,
-      m.preview_image, m.photos, m.links, m.song_ids, m.cover_images
+      m.preview_image, m.split_screen, m.photos, m.links, m.song_ids, m.cover_images
     FROM menu_nodes n
     LEFT JOIN node_metadata m ON m.node_id = n.id
     ORDER BY n.sort_order ASC
@@ -47,6 +47,7 @@ async function getAllNodes() {
       duration: r.duration,
       bodyText: r.body_text,
       previewImage: r.preview_image,
+      splitScreen: r.split_screen,
       photos: r.photos,
       links: r.links,
       songIds: r.song_ids,
@@ -92,6 +93,7 @@ app.get("/api/public/nodes", async (_req, res) => {
           duration: n.metadata.duration || undefined,
           bodyText: n.metadata.bodyText || undefined,
           previewImage: n.metadata.previewImage || undefined,
+          splitScreen: n.metadata.splitScreen ?? undefined,
           photos: n.metadata.photos || undefined,
           links: n.metadata.links || undefined,
           songIds: n.metadata.songIds || undefined,
@@ -144,6 +146,7 @@ app.get("/api/preview/nodes", async (_req, res) => {
         duration: n.metadata.duration || undefined,
         bodyText: n.metadata.bodyText || undefined,
         previewImage: n.metadata.previewImage || undefined,
+        splitScreen: n.metadata.splitScreen ?? undefined,
         photos: n.metadata.photos || undefined,
         links: n.metadata.links || undefined,
         songIds: n.metadata.songIds || undefined,
