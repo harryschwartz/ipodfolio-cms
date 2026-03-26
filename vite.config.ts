@@ -13,9 +13,15 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname, "client"),
   base: "./",
+  optimizeDeps: {
+    include: ["heic2any"],
+  },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    commonjsOptions: {
+      include: [/heic2any/, /node_modules/],
+    },
   },
   server: {
     fs: {
