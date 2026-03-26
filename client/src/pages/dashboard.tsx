@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, ChevronLeft, Plus, Sparkles, List, Columns2 } from "lucide-react";
+import { ExternalLink, ChevronLeft, Plus, Sparkles, List, Columns2, Trash2, Globe, EyeOff, FolderInput, X } from "lucide-react";
 import { ContentTree } from "@/components/content-tree";
 import { NodeEditor } from "@/components/node-editor";
 import { AddNodeDialog } from "@/components/add-node-dialog";
 import { ColumnBrowser } from "@/components/column-browser";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
 type MobileView = "tree" | "editor";
@@ -171,11 +173,14 @@ function ColumnTopBar({
 
 export default function Dashboard() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addParentId, setAddParentId] = useState<string | null>(null);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [mobileView, setMobileView] = useState<MobileView>("tree");
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
   const isMobile = useIsMobile();
+  const { toast } = useToast();
 
   const { data: nodes, isLoading } = useQuery<MenuNodeWithMetadata[]>({
     queryKey: ["/api/nodes"],
@@ -183,9 +188,23 @@ export default function Dashboard() {
 
   const selectedNode = nodes?.find((n) => n.id === selectedNodeId);
 
-  const handleSelectNode = (id: string) => {
-    setSelectedNodeId(id);
-    if (isMobile && id) setMobileView("editor");
+  const handleSelectNode = (id: string, multi?: boolean) => {
+    if (multi) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+      });
+      setSelectedNodeId(null);
+    } else {
+      setSelectedIds(new Set());
+      setSelectedNodeId(id);
+      if (isMobile && id) setMobileView("editor");
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
   };
 
   const handleAddNode = (parentId: string | null) => {
@@ -196,6 +215,49 @@ export default function Dashboard() {
   const handleViewModeChange = (v: ViewMode) => {
     setViewMode(v);
     try { localStorage.setItem("cms-view-mode", v); } catch {}
+  };
+
+  // ─── BULK ACTIONS ───
+  const bulkDelete = async () => {
+    const ids = [...selectedIds];
+    try {
+      await Promise.all(ids.map((id) => apiRequest("DELETE", `/api/nodes/${id}`)));
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      clearSelection();
+      if (ids.includes(selectedNodeId ?? "")) setSelectedNodeId(null);
+      toast({ title: `Deleted ${ids.length} item${ids.length > 1 ? "s" : ""}` });
+    } catch {
+      toast({ title: "Delete failed", variant: "destructive" });
+    }
+  };
+
+  const bulkSetStatus = async (status: "published" | "draft") => {
+    const ids = [...selectedIds];
+    try {
+      await Promise.all(ids.map((id) =>
+        apiRequest("POST", `/api/nodes/${id}/${status === "published" ? "publish" : "unpublish"}`)
+      ));
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      clearSelection();
+      toast({ title: `${status === "published" ? "Published" : "Unpublished"} ${ids.length} item${ids.length > 1 ? "s" : ""}` });
+    } catch {
+      toast({ title: "Failed", variant: "destructive" });
+    }
+  };
+
+  const bulkMove = async (targetParentId: string | null) => {
+    const ids = [...selectedIds];
+    try {
+      await Promise.all(ids.map((id) =>
+        apiRequest("PATCH", `/api/nodes/${id}`, { parentId: targetParentId })
+      ));
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      clearSelection();
+      setMoveDialogOpen(false);
+      toast({ title: `Moved ${ids.length} item${ids.length > 1 ? "s" : ""}` });
+    } catch {
+      toast({ title: "Move failed", variant: "destructive" });
+    }
   };
 
   // ─── MOBILE LAYOUT ───
@@ -253,6 +315,7 @@ export default function Dashboard() {
                 <ContentTree
                   nodes={nodes || []}
                   selectedNodeId={selectedNodeId}
+                  selectedIds={selectedIds}
                   onSelectNode={handleSelectNode}
                   onAddNode={handleAddNode}
                 />
@@ -310,6 +373,7 @@ export default function Dashboard() {
             <ColumnBrowser
               nodes={nodes || []}
               selectedNodeId={selectedNodeId}
+              selectedIds={selectedIds}
               onSelectNode={handleSelectNode}
               onAddNode={handleAddNode}
             />
@@ -325,6 +389,23 @@ export default function Dashboard() {
             setSelectedNodeId(id);
             setAddDialogOpen(false);
           }}
+        />
+
+        <BulkActionBar
+          selectedIds={selectedIds}
+          onClear={clearSelection}
+          onDelete={bulkDelete}
+          onPublish={() => bulkSetStatus("published")}
+          onUnpublish={() => bulkSetStatus("draft")}
+          onMove={() => setMoveDialogOpen(true)}
+        />
+
+        <MoveDialog
+          open={moveDialogOpen}
+          onClose={() => setMoveDialogOpen(false)}
+          nodes={nodes || []}
+          selectedIds={selectedIds}
+          onMove={bulkMove}
         />
       </div>
     );
@@ -366,6 +447,7 @@ export default function Dashboard() {
               <ContentTree
                 nodes={nodes || []}
                 selectedNodeId={selectedNodeId}
+                selectedIds={selectedIds}
                 onSelectNode={handleSelectNode}
                 onAddNode={handleAddNode}
               />
@@ -393,6 +475,101 @@ export default function Dashboard() {
           setAddDialogOpen(false);
         }}
       />
+
+      <BulkActionBar
+        selectedIds={selectedIds}
+        onClear={clearSelection}
+        onDelete={bulkDelete}
+        onPublish={() => bulkSetStatus("published")}
+        onUnpublish={() => bulkSetStatus("draft")}
+        onMove={() => setMoveDialogOpen(true)}
+      />
+
+      <MoveDialog
+        open={moveDialogOpen}
+        onClose={() => setMoveDialogOpen(false)}
+        nodes={nodes || []}
+        selectedIds={selectedIds}
+        onMove={bulkMove}
+      />
+    </div>
+  );
+}
+
+function BulkActionBar({
+  selectedIds, onClear, onDelete, onPublish, onUnpublish, onMove,
+}: {
+  selectedIds: Set<string>;
+  onClear: () => void;
+  onDelete: () => void;
+  onPublish: () => void;
+  onUnpublish: () => void;
+  onMove: () => void;
+}) {
+  const count = selectedIds.size;
+  if (count === 0) return null;
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white rounded-2xl px-4 py-2.5 shadow-2xl border border-white/10">
+      <span className="text-sm font-semibold mr-1">{count} selected</span>
+      <div className="w-px h-4 bg-white/20" />
+      <button onClick={onPublish} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-emerald-400 hover:text-emerald-300">
+        <Globe className="h-3.5 w-3.5" />Publish
+      </button>
+      <button onClick={onUnpublish} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-yellow-400 hover:text-yellow-300">
+        <EyeOff className="h-3.5 w-3.5" />Unpublish
+      </button>
+      <button onClick={onMove} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-blue-400 hover:text-blue-300">
+        <FolderInput className="h-3.5 w-3.5" />Move
+      </button>
+      <button onClick={onDelete} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-red-400 hover:text-red-300">
+        <Trash2 className="h-3.5 w-3.5" />Delete
+      </button>
+      <div className="w-px h-4 bg-white/20" />
+      <button onClick={onClear} className="p-1 rounded-lg hover:bg-white/10 transition-colors text-white/50 hover:text-white">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function MoveDialog({
+  open, onClose, nodes, selectedIds, onMove,
+}: {
+  open: boolean;
+  onClose: () => void;
+  nodes: MenuNodeWithMetadata[];
+  selectedIds: Set<string>;
+  onMove: (parentId: string | null) => void;
+}) {
+  if (!open) return null;
+  const folders = nodes.filter((n) =>
+    ["folder", "album", "playlist", "photo_album"].includes(n.type) && !selectedIds.has(n.id)
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-background rounded-2xl shadow-2xl border border-border w-80 max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h3 className="font-semibold text-sm">Move to…</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 py-1">
+          <button
+            onClick={() => onMove(null)}
+            className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors flex items-center gap-2"
+          >
+            <span className="text-muted-foreground">📁</span> Top level (no parent)
+          </button>
+          {folders.map((n) => (
+            <button
+              key={n.id}
+              onClick={() => onMove(n.id)}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors flex items-center gap-2"
+            >
+              <span className="text-muted-foreground">📁</span> {n.title}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

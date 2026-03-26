@@ -60,6 +60,7 @@ function ColumnItem({
   node,
   nodes,
   isSelected,
+  isMultiSelected,
   isInPath,
   isSiblingDragOver,
   isFolderDropTarget,
@@ -72,10 +73,11 @@ function ColumnItem({
   node: MenuNodeWithMetadata;
   nodes: MenuNodeWithMetadata[];
   isSelected: boolean;
+  isMultiSelected: boolean;
   isInPath: boolean;
   isSiblingDragOver: boolean;
   isFolderDropTarget: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -90,7 +92,9 @@ function ColumnItem({
     <div
       className={cn(
         "flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none group transition-colors duration-75",
-        isSelected
+        isMultiSelected
+          ? "bg-indigo-100 text-foreground"
+          : isSelected
           ? "bg-primary text-primary-foreground"
           : isInPath
           ? "bg-primary/10 text-foreground"
@@ -105,20 +109,26 @@ function ColumnItem({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <div className={cn(
-        "w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors",
-        isSelected ? "bg-white/20" : iconStyle
-      )}>
-        <Icon className="h-3.5 w-3.5" />
-      </div>
+      {isMultiSelected ? (
+        <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 bg-indigo-500">
+          <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+      ) : (
+        <div className={cn(
+          "w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors",
+          isSelected ? "bg-white/20" : iconStyle
+        )}>
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+      )}
 
       <span className="truncate flex-1 text-sm font-medium">{node.title}</span>
 
-      {isPublished && !isSelected && (
+      {isPublished && !isSelected && !isMultiSelected && (
         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" title="Published" />
       )}
 
-      {nodeIsContainer && (
+      {nodeIsContainer && !isMultiSelected && (
         <ChevronRight className={cn(
           "h-3.5 w-3.5 flex-shrink-0",
           isSelected ? "text-primary-foreground/70" : "text-muted-foreground/50"
@@ -134,6 +144,7 @@ function BrowserColumn({
   nodes,
   columnPath,
   selectedNodeId,
+  selectedIds,
   onClickNode,
   onAddNode,
   dragState,
@@ -147,7 +158,8 @@ function BrowserColumn({
   nodes: MenuNodeWithMetadata[];
   columnPath: string[];
   selectedNodeId: string | null;
-  onClickNode: (node: MenuNodeWithMetadata) => void;
+  selectedIds: Set<string>;
+  onClickNode: (node: MenuNodeWithMetadata, e: React.MouseEvent) => void;
   onAddNode: (parentId: string | null) => void;
   dragState: { dragOverId: string | null; dropFolderId: string | null };
   onDragStart: (e: React.DragEvent, nodeId: string) => void;
@@ -205,10 +217,11 @@ function BrowserColumn({
               node={node}
               nodes={nodes}
               isSelected={node.id === selectedNodeId}
+              isMultiSelected={selectedIds.has(node.id)}
               isInPath={columnPath.includes(node.id)}
               isSiblingDragOver={node.id === dragState.dragOverId}
               isFolderDropTarget={node.id === dragState.dropFolderId}
-              onClick={() => onClickNode(node)}
+              onClick={(e) => onClickNode(node, e)}
               onDragStart={(e) => onDragStart(e, node.id)}
               onDragOver={(e) => onDragOver(e, node.id)}
               onDragLeave={onDragLeave}
@@ -225,12 +238,14 @@ function BrowserColumn({
 export function ColumnBrowser({
   nodes,
   selectedNodeId,
+  selectedIds,
   onSelectNode,
   onAddNode,
 }: {
   nodes: MenuNodeWithMetadata[];
   selectedNodeId: string | null;
-  onSelectNode: (id: string) => void;
+  selectedIds: Set<string>;
+  onSelectNode: (id: string, multi?: boolean) => void;
   onAddNode: (parentId: string | null) => void;
 }) {
   // columnPath: array of folder IDs that are "open" — drives which columns show
@@ -249,7 +264,11 @@ export function ColumnBrowser({
     }
   }, [columnPath.length]);
 
-  const handleClickNode = useCallback((node: MenuNodeWithMetadata) => {
+  const handleClickNode = useCallback((node: MenuNodeWithMetadata, e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      onSelectNode(node.id, true);
+      return;
+    }
     const nodeIsContainer = isContainerNode(node, nodes);
     onSelectNode(node.id);
 
@@ -418,6 +437,7 @@ export function ColumnBrowser({
             nodes={nodes}
             columnPath={columnPath}
             selectedNodeId={selectedNodeId}
+            selectedIds={selectedIds}
             onClickNode={handleClickNode}
             onAddNode={onAddNode}
             dragState={dragState}
@@ -435,7 +455,7 @@ export function ColumnBrowser({
       {/* Editor pane */}
       <div className="w-[420px] min-w-[320px] shrink-0 border-l border-border flex flex-col overflow-hidden">
         {selectedNode ? (
-          <NodeEditor node={selectedNode} allNodes={nodes} onSelectNode={onSelectNode} />
+          <NodeEditor node={selectedNode} allNodes={nodes} onSelectNode={onSelectNode} onAddNode={onAddNode} />
         ) : (
           <div className="flex-1 flex items-center justify-center p-8 text-center">
             <div>

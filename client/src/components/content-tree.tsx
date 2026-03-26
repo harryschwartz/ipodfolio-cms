@@ -78,6 +78,7 @@ function TreeNode({
   nodes,
   depth,
   selectedNodeId,
+  selectedIds,
   onSelectNode,
   onAddNode,
   expandedIds,
@@ -93,7 +94,8 @@ function TreeNode({
   nodes: MenuNodeWithMetadata[];
   depth: number;
   selectedNodeId: string | null;
-  onSelectNode: (id: string) => void;
+  selectedIds: Set<string>;
+  onSelectNode: (id: string, multi?: boolean) => void;
   onAddNode: (parentId: string | null) => void;
   expandedIds: Set<string>;
   toggleExpanded: (id: string) => void;
@@ -109,7 +111,8 @@ function TreeNode({
   const selectedBg = TYPE_SELECTED_BG[node.type] || "bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary))]";
   const isExpanded = expandedIds.has(node.id);
   const nodeIsFolder = isFolder(node, nodes);
-  const isSelected = node.id === selectedNodeId;
+  const isSelected = node.id === selectedNodeId || selectedIds.has(node.id);
+  const isMultiSelected = selectedIds.has(node.id);
   const isSiblingDragOver = node.id === dragOverId;
   const isFolderDropTarget = node.id === dropFolderId;
   const isPublished = node.status === "published";
@@ -126,19 +129,26 @@ function TreeNode({
           isSelected
             ? cn("text-foreground font-medium", selectedBg)
             : "text-foreground/70 hover:text-foreground hover:bg-muted/60",
+          isMultiSelected && "bg-indigo-50 shadow-[inset_3px_0_0_theme(colors.indigo.400)] text-foreground font-medium",
           isSiblingDragOver && "border-t-2 border-primary/60",
           isFolderDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary/40"
         )}
         style={{ paddingLeft: `${depth * 16 + 10}px` }}
-        onClick={() => onSelectNode(node.id)}
+        onClick={(e) => onSelectNode(node.id, e.metaKey || e.ctrlKey)}
         draggable
         onDragStart={(e) => onDragStart(e, node.id)}
         onDragOver={(e) => onDragOver(e, node.id)}
         onDragLeave={onDragLeave}
         onDrop={(e) => onDrop(e, node.id)}
       >
-        {/* Drag handle */}
-        <GripVertical className="h-3.5 w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
+        {/* Drag handle / checkbox */}
+        {isMultiSelected ? (
+          <div className="h-3.5 w-3.5 flex-shrink-0 rounded-sm bg-indigo-500 flex items-center justify-center">
+            <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+        ) : (
+          <GripVertical className="h-3.5 w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
+        )}
 
         {/* Expand toggle */}
         {nodeIsFolder ? (
@@ -189,6 +199,7 @@ function TreeNode({
               nodes={nodes}
               depth={depth + 1}
               selectedNodeId={selectedNodeId}
+              selectedIds={selectedIds}
               onSelectNode={onSelectNode}
               onAddNode={onAddNode}
               expandedIds={expandedIds}
@@ -210,12 +221,14 @@ function TreeNode({
 export function ContentTree({
   nodes,
   selectedNodeId,
+  selectedIds,
   onSelectNode,
   onAddNode,
 }: {
   nodes: MenuNodeWithMetadata[];
   selectedNodeId: string | null;
-  onSelectNode: (id: string) => void;
+  selectedIds: Set<string>;
+  onSelectNode: (id: string, multi?: boolean) => void;
   onAddNode: (parentId: string | null) => void;
 }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
@@ -329,6 +342,7 @@ export function ContentTree({
           nodes={nodes}
           depth={0}
           selectedNodeId={selectedNodeId}
+          selectedIds={selectedIds}
           onSelectNode={onSelectNode}
           onAddNode={onAddNode}
           expandedIds={expandedIds}
