@@ -78,6 +78,7 @@ function ColumnItem({
   isSiblingDragOver: boolean;
   isFolderDropTarget: boolean;
   onClick: (e: React.MouseEvent) => void;
+  onLongPress: () => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -87,6 +88,19 @@ function ColumnItem({
   const iconStyle = TYPE_ICON_STYLE[node.type] || "bg-gray-100 text-gray-500";
   const nodeIsContainer = isContainerNode(node, nodes);
   const isPublished = node.status === "published";
+
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPress = useRef(false);
+  const handleTouchStart = () => {
+    didLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      onLongPress();
+    }, 500);
+  };
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
 
   return (
     <div
@@ -102,7 +116,10 @@ function ColumnItem({
         isSiblingDragOver && "border-t-2 border-primary/60",
         isFolderDropTarget && !isSelected && "bg-primary/15 ring-2 ring-inset ring-primary/40"
       )}
-      onClick={onClick}
+      onClick={(e) => { if (didLongPress.current) { didLongPress.current = false; return; } onClick(e); }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
@@ -146,6 +163,7 @@ function BrowserColumn({
   selectedNodeId,
   selectedIds,
   onClickNode,
+  onLongPressNode,
   onAddNode,
   dragState,
   onDragStart,
@@ -160,6 +178,7 @@ function BrowserColumn({
   selectedNodeId: string | null;
   selectedIds: Set<string>;
   onClickNode: (node: MenuNodeWithMetadata, e: React.MouseEvent) => void;
+  onLongPressNode: (node: MenuNodeWithMetadata) => void;
   onAddNode: (parentId: string | null) => void;
   dragState: { dragOverId: string | null; dropFolderId: string | null };
   onDragStart: (e: React.DragEvent, nodeId: string) => void;
@@ -222,6 +241,7 @@ function BrowserColumn({
               isSiblingDragOver={node.id === dragState.dragOverId}
               isFolderDropTarget={node.id === dragState.dropFolderId}
               onClick={(e) => onClickNode(node, e)}
+              onLongPress={() => onLongPressNode(node)}
               onDragStart={(e) => onDragStart(e, node.id)}
               onDragOver={(e) => onDragOver(e, node.id)}
               onDragLeave={onDragLeave}
@@ -245,7 +265,7 @@ export function ColumnBrowser({
   nodes: MenuNodeWithMetadata[];
   selectedNodeId: string | null;
   selectedIds: Set<string>;
-  onSelectNode: (id: string, multi?: boolean) => void;
+  onSelectNode: (id: string, mode?: "multi" | "range" | "longpress") => void;
   onAddNode: (parentId: string | null) => void;
 }) {
   // columnPath: array of folder IDs that are "open" — drives which columns show
@@ -264,11 +284,14 @@ export function ColumnBrowser({
     }
   }, [columnPath.length]);
 
+  const handleLongPressNode = useCallback((node: MenuNodeWithMetadata) => {
+    onSelectNode(node.id, "longpress");
+  }, [onSelectNode]);
+
   const handleClickNode = useCallback((node: MenuNodeWithMetadata, e: React.MouseEvent) => {
-    if (e.metaKey || e.ctrlKey) {
-      onSelectNode(node.id, true);
-      return;
-    }
+    if (e.shiftKey) { onSelectNode(node.id, "range"); return; }
+    if (e.metaKey || e.ctrlKey) { onSelectNode(node.id, "multi"); return; }
+    if (selectedIds.size > 0) { onSelectNode(node.id, "multi"); return; }
     const nodeIsContainer = isContainerNode(node, nodes);
     onSelectNode(node.id);
 
@@ -439,6 +462,7 @@ export function ColumnBrowser({
             selectedNodeId={selectedNodeId}
             selectedIds={selectedIds}
             onClickNode={handleClickNode}
+            onLongPressNode={handleLongPressNode}
             onAddNode={onAddNode}
             dragState={dragState}
             onDragStart={handleDragStart}

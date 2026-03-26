@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -181,6 +181,7 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
   const isMobile = useIsMobile();
   const { toast } = useToast();
+  const lastSelectedIdRef = useRef<string | null>(null);
 
   const { data: nodes, isLoading } = useQuery<MenuNodeWithMetadata[]>({
     queryKey: ["/api/nodes"],
@@ -188,23 +189,67 @@ export default function Dashboard() {
 
   const selectedNode = nodes?.find((n) => n.id === selectedNodeId);
 
-  const handleSelectNode = (id: string, multi?: boolean) => {
-    if (multi) {
+  // Returns a flat list of all visible node IDs in display order (for range selection)
+  const getVisibleIds = useCallback((): string[] => {
+    if (!nodes) return [];
+    const result: string[] = [];
+    const visit = (parentId: string | null) => {
+      const children = nodes
+        .filter((n) => n.parentId === parentId)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      for (const n of children) {
+        result.push(n.id);
+        visit(n.id);
+      }
+    };
+    visit(null);
+    return result;
+  }, [nodes]);
+
+  const handleSelectNode = useCallback((id: string, mode?: "multi" | "range" | "longpress") => {
+    if (mode === "multi" || mode === "longpress") {
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.has(id) ? next.delete(id) : next.add(id);
+        if (next.size > 0) lastSelectedIdRef.current = id;
         return next;
       });
       setSelectedNodeId(null);
+    } else if (mode === "range") {
+      const visibleIds = getVisibleIds();
+      const anchor = lastSelectedIdRef.current;
+      if (!anchor || anchor === id) {
+        // No anchor yet — just toggle
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.has(id) ? next.delete(id) : next.add(id);
+          return next;
+        });
+      } else {
+        const anchorIdx = visibleIds.indexOf(anchor);
+        const clickIdx = visibleIds.indexOf(id);
+        if (anchorIdx === -1 || clickIdx === -1) return;
+        const [from, to] = anchorIdx < clickIdx ? [anchorIdx, clickIdx] : [clickIdx, anchorIdx];
+        const rangeIds = visibleIds.slice(from, to + 1);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          rangeIds.forEach((rid) => next.add(rid));
+          return next;
+        });
+      }
+      setSelectedNodeId(null);
     } else {
+      // Normal click — clear multi-select, select single
       setSelectedIds(new Set());
+      lastSelectedIdRef.current = id;
       setSelectedNodeId(id);
       if (isMobile && id) setMobileView("editor");
     }
-  };
+  }, [getVisibleIds, isMobile]);
 
   const clearSelection = () => {
     setSelectedIds(new Set());
+    lastSelectedIdRef.current = null;
   };
 
   const handleAddNode = (parentId: string | null) => {
@@ -342,6 +387,23 @@ export default function Dashboard() {
             setAddDialogOpen(false);
             setMobileView("editor");
           }}
+        />
+
+        <BulkActionBar
+          selectedIds={selectedIds}
+          onClear={clearSelection}
+          onDelete={bulkDelete}
+          onPublish={() => bulkSetStatus("published")}
+          onUnpublish={() => bulkSetStatus("draft")}
+          onMove={() => setMoveDialogOpen(true)}
+        />
+
+        <MoveDialog
+          open={moveDialogOpen}
+          onClose={() => setMoveDialogOpen(false)}
+          nodes={nodes || []}
+          selectedIds={selectedIds}
+          onMove={bulkMove}
         />
       </div>
     );

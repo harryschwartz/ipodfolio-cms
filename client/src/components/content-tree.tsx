@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -95,7 +95,7 @@ function TreeNode({
   depth: number;
   selectedNodeId: string | null;
   selectedIds: Set<string>;
-  onSelectNode: (id: string, multi?: boolean) => void;
+  onSelectNode: (id: string, mode?: "multi" | "range" | "longpress") => void;
   onAddNode: (parentId: string | null) => void;
   expandedIds: Set<string>;
   toggleExpanded: (id: string) => void;
@@ -117,6 +117,20 @@ function TreeNode({
   const isFolderDropTarget = node.id === dropFolderId;
   const isPublished = node.status === "published";
 
+  // Long-press for mobile multi-select
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPress = useRef(false);
+  const handleTouchStart = () => {
+    didLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      onSelectNode(node.id, "longpress");
+    }, 500);
+  };
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  };
+
   const children = nodes
     .filter((n) => n.parentId === node.id)
     .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -134,7 +148,16 @@ function TreeNode({
           isFolderDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary/40"
         )}
         style={{ paddingLeft: `${depth * 16 + 10}px` }}
-        onClick={(e) => onSelectNode(node.id, e.metaKey || e.ctrlKey)}
+        onClick={(e) => {
+          if (didLongPress.current) { didLongPress.current = false; return; }
+          if (e.shiftKey) onSelectNode(node.id, "range");
+          else if (e.metaKey || e.ctrlKey) onSelectNode(node.id, "multi");
+          else if (selectedIds.size > 0) onSelectNode(node.id, "multi");
+          else onSelectNode(node.id);
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchEnd}
         draggable
         onDragStart={(e) => onDragStart(e, node.id)}
         onDragOver={(e) => onDragOver(e, node.id)}
@@ -228,7 +251,7 @@ export function ContentTree({
   nodes: MenuNodeWithMetadata[];
   selectedNodeId: string | null;
   selectedIds: Set<string>;
-  onSelectNode: (id: string, multi?: boolean) => void;
+  onSelectNode: (id: string, mode?: "multi" | "range" | "longpress") => void;
   onAddNode: (parentId: string | null) => void;
 }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
