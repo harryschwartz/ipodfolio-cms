@@ -20,7 +20,7 @@ async function getAllNodes() {
     SELECT n.*, 
       m.id as meta_id, m.cover_image_url, m.artist_name, m.album_name, m.audio_url, 
       m.video_url, m.video_thumbnail_url, m.link_url, m.duration, m.body_text,
-      m.preview_image, m.split_screen, m.photos, m.links, m.song_ids, m.cover_images
+      m.preview_image, m.split_screen, m.cover_emoji, m.cover_color, m.photos, m.links, m.song_ids, m.cover_images
     FROM menu_nodes n
     LEFT JOIN node_metadata m ON m.node_id = n.id
     ORDER BY n.sort_order ASC
@@ -38,6 +38,8 @@ async function getAllNodes() {
       id: r.meta_id,
       nodeId: r.id,
       coverImageUrl: r.cover_image_url,
+      coverEmoji: r.cover_emoji,
+      coverColor: r.cover_color,
       artistName: r.artist_name,
       albumName: r.album_name,
       audioUrl: r.audio_url,
@@ -82,6 +84,8 @@ app.get("/api/public/nodes", async (_req, res) => {
         metadata: n.metadata ? {
           coverImage: n.metadata.coverImageUrl || undefined,
           coverImageUrl: n.metadata.coverImageUrl || undefined,
+          coverEmoji: n.metadata.coverEmoji || undefined,
+          coverColor: n.metadata.coverColor || undefined,
           artistName: n.metadata.artistName || undefined,
           albumName: n.metadata.albumName || undefined,
           audioUrl: n.metadata.audioUrl || undefined,

@@ -144,6 +144,9 @@ export function NodeEditor({
   const [linkUrl, setLinkUrl] = useState(node.metadata?.linkUrl || "");
   const [bodyText, setBodyText] = useState(node.metadata?.bodyText || "");
   const [coverImageUrl, setCoverImageUrl] = useState(node.metadata?.coverImageUrl || "");
+  const [coverEmoji, setCoverEmoji] = useState((node.metadata as any)?.coverEmoji || "");
+  const [coverColor, setCoverColor] = useState((node.metadata as any)?.coverColor || "#6366f1");
+  const [coverMode, setCoverMode] = useState<"image" | "emoji">((node.metadata as any)?.coverEmoji ? "emoji" : "image");
   const [previewImage, setPreviewImage] = useState(node.metadata?.previewImage || "");
   const [splitScreen, setSplitScreen] = useState(node.metadata?.splitScreen ?? false);
   const [videoThumbnailUrl, setVideoThumbnailUrl] = useState(node.metadata?.videoThumbnailUrl || "");
@@ -212,6 +215,9 @@ export function NodeEditor({
     setLinkUrl(node.metadata?.linkUrl || "");
     setBodyText(node.metadata?.bodyText || "");
     setCoverImageUrl(node.metadata?.coverImageUrl || "");
+    setCoverEmoji((node.metadata as any)?.coverEmoji || "");
+    setCoverColor((node.metadata as any)?.coverColor || "#6366f1");
+    setCoverMode((node.metadata as any)?.coverEmoji ? "emoji" : "image");
     setPreviewImage(node.metadata?.previewImage || "");
     setSplitScreen(node.metadata?.splitScreen ?? false);
     setVideoThumbnailUrl(node.metadata?.videoThumbnailUrl || "");
@@ -231,7 +237,9 @@ export function NodeEditor({
           videoUrl: videoUrl || null,
           linkUrl: linkUrl || null,
           bodyText: bodyText || null,
-          coverImageUrl: coverImageUrl || null,
+          coverImageUrl: coverMode === "image" ? (coverImageUrl || null) : null,
+          coverEmoji: coverMode === "emoji" ? (coverEmoji || null) : null,
+          coverColor: coverMode === "emoji" ? (coverColor || null) : null,
           previewImage: previewImage || null,
           splitScreen: splitScreen ?? null,
           videoThumbnailUrl: videoThumbnailUrl || null,
@@ -416,7 +424,17 @@ export function NodeEditor({
                   <div>
                     <SectionHeader>Cover Art</SectionHeader>
                     <FieldGroup>
-                      <ImageUploader value={coverImageUrl} onChange={setCoverImageUrl} onUpload={(f) => handleImageUpload(f, setCoverImageUrl)} />
+                      <CoverArtPicker
+                        mode={coverMode}
+                        onModeChange={setCoverMode}
+                        imageUrl={coverImageUrl}
+                        onImageChange={setCoverImageUrl}
+                        onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        emoji={coverEmoji}
+                        onEmojiChange={setCoverEmoji}
+                        color={coverColor}
+                        onColorChange={setCoverColor}
+                      />
                     </FieldGroup>
                   </div>
                   <div>
@@ -468,7 +486,17 @@ export function NodeEditor({
                   <div>
                     <SectionHeader>Cover Art</SectionHeader>
                     <FieldGroup>
-                      <ImageUploader value={coverImageUrl} onChange={setCoverImageUrl} onUpload={(f) => handleImageUpload(f, setCoverImageUrl)} />
+                      <CoverArtPicker
+                        mode={coverMode}
+                        onModeChange={setCoverMode}
+                        imageUrl={coverImageUrl}
+                        onImageChange={setCoverImageUrl}
+                        onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        emoji={coverEmoji}
+                        onEmojiChange={setCoverEmoji}
+                        color={coverColor}
+                        onColorChange={setCoverColor}
+                      />
                     </FieldGroup>
                   </div>
                   <div>
@@ -495,7 +523,17 @@ export function NodeEditor({
                   <div>
                     <SectionHeader>Cover Art</SectionHeader>
                     <FieldGroup>
-                      <ImageUploader value={coverImageUrl} onChange={setCoverImageUrl} onUpload={(f) => handleImageUpload(f, setCoverImageUrl)} />
+                      <CoverArtPicker
+                        mode={coverMode}
+                        onModeChange={setCoverMode}
+                        imageUrl={coverImageUrl}
+                        onImageChange={setCoverImageUrl}
+                        onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        emoji={coverEmoji}
+                        onEmojiChange={setCoverEmoji}
+                        color={coverColor}
+                        onColorChange={setCoverColor}
+                      />
                     </FieldGroup>
                   </div>
                   <div>
@@ -704,6 +742,91 @@ export function NodeEditor({
 
 // Need Settings icon inside the read-only section
 import { Settings } from "lucide-react";
+
+const PRESET_COLORS = [
+  "#6366f1", "#8b5cf6", "#ec4899", "#ef4444",
+  "#f97316", "#eab308", "#22c55e", "#14b8a6",
+  "#3b82f6", "#06b6d4", "#64748b", "#1e293b",
+];
+
+function CoverArtPicker({
+  mode, onModeChange,
+  imageUrl, onImageChange, onImageUpload,
+  emoji, onEmojiChange,
+  color, onColorChange,
+}: {
+  mode: "image" | "emoji"; onModeChange: (m: "image" | "emoji") => void;
+  imageUrl: string; onImageChange: (u: string) => void; onImageUpload: (f: File) => Promise<void>;
+  emoji: string; onEmojiChange: (e: string) => void;
+  color: string; onColorChange: (c: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      {/* Tab toggle */}
+      <div className="flex rounded-lg border border-border overflow-hidden text-xs font-medium w-fit">
+        <button
+          type="button"
+          onClick={() => onModeChange("image")}
+          className={`px-3 py-1.5 transition-colors ${mode === "image" ? "bg-indigo-600 text-white" : "bg-background text-muted-foreground hover:bg-muted"}`}
+        >
+          Image
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange("emoji")}
+          className={`px-3 py-1.5 transition-colors ${mode === "emoji" ? "bg-indigo-600 text-white" : "bg-background text-muted-foreground hover:bg-muted"}`}
+        >
+          Emoji
+        </button>
+      </div>
+
+      {mode === "image" ? (
+        <ImageUploader value={imageUrl} onChange={onImageChange} onUpload={onImageUpload} />
+      ) : (
+        <div className="space-y-3">
+          {/* Preview */}
+          <div
+            className="w-24 h-24 rounded-2xl flex items-center justify-center text-4xl shadow-sm border border-border/50"
+            style={{ backgroundColor: color }}
+          >
+            {emoji || "🎵"}
+          </div>
+          {/* Emoji input */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Emoji</label>
+            <Input
+              value={emoji}
+              onChange={(e) => onEmojiChange(e.target.value)}
+              placeholder="🎵"
+              className="w-24 text-2xl text-center"
+              maxLength={4}
+            />
+          </div>
+          {/* Color swatches */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1.5 block">Background color</label>
+            <div className="flex flex-wrap gap-2">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => onColorChange(c)}
+                  className={`w-7 h-7 rounded-full transition-transform hover:scale-110 ${color === c ? "ring-2 ring-offset-2 ring-indigo-500 scale-110" : ""}`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+              {/* Custom color */}
+              <label className="w-7 h-7 rounded-full border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-indigo-400 overflow-hidden" title="Custom color">
+                <input type="color" value={color} onChange={(e) => onColorChange(e.target.value)} className="opacity-0 absolute w-0 h-0" />
+                <span className="text-[10px] text-muted-foreground">+</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ImageUploader({ value, onChange, onUpload }: { value: string; onChange: (url: string) => void; onUpload: (file: File) => Promise<void> }) {
   const [uploading, setUploading] = useState(false);
