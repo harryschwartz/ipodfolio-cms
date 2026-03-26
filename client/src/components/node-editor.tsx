@@ -525,7 +525,21 @@ export function NodeEditor({
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
                       </div>
                     ))}
-                    <label className="cursor-pointer block">
+                    <label
+                      className="cursor-pointer block"
+                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.setAttribute("data-drag", "true"); }}
+                      onDragLeave={(e) => { e.currentTarget.removeAttribute("data-drag"); }}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        e.currentTarget.removeAttribute("data-drag");
+                        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+                        for (const file of files) {
+                          const { blob, ext } = await convertHeicToJpeg(file);
+                          const url = await uploadToSupabase(blob, ext);
+                          setPhotos((prev) => [...prev, { url, caption: "", sortOrder: prev.length }]);
+                        }
+                      }}
+                    >
                       <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
                         const files = e.target.files;
                         if (!files) return;
@@ -535,9 +549,10 @@ export function NodeEditor({
                           setPhotos((prev) => [...prev, { url, caption: "", sortOrder: prev.length }]);
                         }
                       }} />
-                      <Button variant="outline" size="sm" asChild className="gap-2">
-                        <span data-testid="button-add-photos"><Plus className="h-4 w-4" />Add Photos</span>
-                      </Button>
+                      <div className="border-2 border-dashed border-border rounded-lg px-4 py-6 text-center text-sm text-muted-foreground hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors [&[data-drag]]:border-indigo-500 [&[data-drag]]:bg-indigo-50">
+                        <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                        <span>Drop photos here or <span className="text-indigo-600 font-medium">browse</span></span>
+                      </div>
                     </label>
                   </FieldGroup>
                 </div>
