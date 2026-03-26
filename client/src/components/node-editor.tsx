@@ -1,4 +1,5 @@
 import { useState } from "react";
+import heic2any from "heic2any";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,10 +128,12 @@ export function NodeEditor({
   node,
   allNodes,
   onSelectNode,
+  onAddNode,
 }: {
   node: MenuNodeWithMetadata;
   allNodes: MenuNodeWithMetadata[];
   onSelectNode: (id: string) => void;
+  onAddNode: (parentId: string | null) => void;
 }) {
   const { toast } = useToast();
   const [title, setTitle] = useState(node.title);
@@ -239,9 +242,16 @@ export function NodeEditor({
     return `${SUPABASE_URL}/storage/v1/object/public/cms-assets/${path}`;
   };
 
+  const convertHeicToJpeg = async (file: File): Promise<{ blob: Blob; ext: string }> => {
+    const isHeic = /heic|heif/i.test(file.name.split(".").pop() || "") || /heic|heif/i.test(file.type);
+    if (!isHeic) return { blob: file, ext: file.name.split(".").pop() || "jpg" };
+    const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+    return { blob: Array.isArray(converted) ? converted[0] : converted, ext: "jpg" };
+  };
+
   const handleImageUpload = async (file: File, setter: (url: string) => void) => {
-    const ext = file.name.split(".").pop() || "jpg";
-    setter(await uploadToSupabase(file, ext));
+    const { blob, ext } = await convertHeicToJpeg(file);
+    setter(await uploadToSupabase(blob, ext));
   };
 
   const handleAudioUpload = async (file: File | Blob) => {
@@ -443,9 +453,20 @@ export function NodeEditor({
                     </FieldGroup>
                   </div>
                   <div>
-                    <SectionHeader>Songs</SectionHeader>
+                    <div className="flex items-center justify-between mb-2">
+                      <SectionHeader>Songs</SectionHeader>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1 mr-1"
+                        onClick={() => onAddNode(node.id)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add Song
+                      </Button>
+                    </div>
                     <FieldGroup className="p-0 overflow-hidden space-y-0">
-                      {allNodes.filter((n) => n.type === "song").map((song) => (
+                      {allNodes.filter((n) => n.parentId === node.id && n.type === "song").map((song) => (
                         <div key={song.id} className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0">
                           <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
                             <Music className="h-3.5 w-3.5 text-emerald-600" />
@@ -456,7 +477,7 @@ export function NodeEditor({
                           </div>
                         </div>
                       ))}
-                      {allNodes.filter((n) => n.type === "song").length === 0 && (
+                      {allNodes.filter((n) => n.parentId === node.id && n.type === "song").length === 0 && (
                         <div className="px-4 py-8 text-center text-sm text-muted-foreground">No songs yet</div>
                       )}
                     </FieldGroup>
@@ -505,12 +526,12 @@ export function NodeEditor({
                       </div>
                     ))}
                     <label className="cursor-pointer block">
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
+                      <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
                         const files = e.target.files;
                         if (!files) return;
                         for (const file of Array.from(files)) {
-                          const ext = file.name.split(".").pop() || "jpg";
-                          const url = await uploadToSupabase(file, ext);
+                          const { blob, ext } = await convertHeicToJpeg(file);
+                          const url = await uploadToSupabase(blob, ext);
                           setPhotos((prev) => [...prev, { url, caption: "", sortOrder: prev.length }]);
                         }
                       }} />
@@ -657,7 +678,7 @@ function ImageUploader({ value, onChange, onUpload }: { value: string; onChange:
         </div>
       ) : (
         <label className={uploading ? "cursor-wait block" : "cursor-pointer block"}>
-          <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={async (e) => {
+          <input type="file" accept="image/*,.heic,.heif" className="hidden" disabled={uploading} onChange={async (e) => {
             const f = e.target.files?.[0];
             if (!f) return;
             setUploading(true);

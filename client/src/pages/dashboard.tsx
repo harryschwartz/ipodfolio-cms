@@ -262,7 +262,7 @@ export default function Dashboard() {
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             {selectedNode ? (
-              <NodeEditor node={selectedNode} allNodes={nodes || []} onSelectNode={handleSelectNode} />
+              <NodeEditor node={selectedNode} allNodes={nodes || []} onSelectNode={handleSelectNode} onAddNode={handleAddNode} />
             ) : (
               <EmptyState onAdd={() => handleAddNode(null)} />
             )}
@@ -377,7 +377,7 @@ export default function Dashboard() {
       {/* Main Area */}
       <main className="flex-1 flex flex-col overflow-hidden bg-background">
         {selectedNode ? (
-          <NodeEditor node={selectedNode} allNodes={nodes || []} onSelectNode={handleSelectNode} />
+          <NodeEditor node={selectedNode} allNodes={nodes || []} onSelectNode={handleSelectNode} onAddNode={handleAddNode} />
         ) : (
           <EmptyState onAdd={() => handleAddNode(null)} />
         )}
