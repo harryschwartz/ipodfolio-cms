@@ -509,11 +509,9 @@ export function NodeEditor({
                         const files = e.target.files;
                         if (!files) return;
                         for (const file of Array.from(files)) {
-                          const formData = new FormData();
-                          formData.append("file", file);
-                          const res = await fetch(`${"__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__"}/api/upload/image`, { method: "POST", body: formData });
-                          const data = await res.json();
-                          setPhotos((prev) => [...prev, { url: data.url, caption: "", sortOrder: prev.length }]);
+                          const ext = file.name.split(".").pop() || "jpg";
+                          const url = await uploadToSupabase(file, ext);
+                          setPhotos((prev) => [...prev, { url, caption: "", sortOrder: prev.length }]);
                         }
                       }} />
                       <Button variant="outline" size="sm" asChild className="gap-2">
