@@ -221,47 +221,37 @@ export function NodeEditor({
     },
   });
 
-  const handleImageUpload = async (file: File, setter: (url: string) => void) => {
+  const uploadToSupabase = async (file: File | Blob, ext: string): Promise<string> => {
     const SUPABASE_URL = "https://xtjjavrixvnwoulgebqp.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0amphdnJpeHZud291bGdlYnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjgxNjIsImV4cCI6MjA4OTU0NDE2Mn0.aSL3bi4__sS1OaeF2_MkTMrOGfHmnHBKxhKP8zd0qAQ";
-    const ext = file.name.split(".").pop();
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const contentType = file instanceof File ? file.type : `audio/${ext}`;
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/cms-assets/${path}`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": file.type,
+        "Content-Type": contentType,
         "x-upsert": "true",
       },
       body: file,
     });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Upload failed: ${err}`);
-    }
-    setter(`${SUPABASE_URL}/storage/v1/object/public/cms-assets/${path}`);
+    if (!res.ok) throw new Error(`Upload failed: ${await res.text()}`);
+    return `${SUPABASE_URL}/storage/v1/object/public/cms-assets/${path}`;
   };
 
-  const handleAudioUpload = async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(
-      `${"__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__"}/api/upload/audio`,
-      { method: "POST", body: formData }
-    );
-    const data = await res.json();
-    setAudioUrl(data.url);
+  const handleImageUpload = async (file: File, setter: (url: string) => void) => {
+    const ext = file.name.split(".").pop() || "jpg";
+    setter(await uploadToSupabase(file, ext));
+  };
+
+  const handleAudioUpload = async (file: File | Blob) => {
+    const ext = file instanceof File ? (file.name.split(".").pop() || "webm") : "webm";
+    setAudioUrl(await uploadToSupabase(file, ext));
   };
 
   const handleVideoUpload = async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    const res = await fetch(
-      `${"__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__"}/api/upload/video`,
-      { method: "POST", body: formData }
-    );
-    const data = await res.json();
-    setVideoUrl(data.url);
+    const ext = file.name.split(".").pop() || "mp4";
+    setVideoUrl(await uploadToSupabase(file, ext));
   };
 
   const isReadOnly = ["settings", "game", "cover_flow_home", "cover_flow_music"].includes(node.type);
