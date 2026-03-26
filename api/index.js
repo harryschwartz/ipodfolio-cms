@@ -139,6 +139,8 @@ app.get("/api/preview/nodes", async (_req, res) => {
       metadata: n.metadata ? {
         coverImage: n.metadata.coverImageUrl || undefined,
         coverImageUrl: n.metadata.coverImageUrl || undefined,
+        coverEmoji: n.metadata.coverEmoji || undefined,
+        coverColor: n.metadata.coverColor || undefined,
         artistName: n.metadata.artistName || undefined,
         albumName: n.metadata.albumName || undefined,
         audioUrl: n.metadata.audioUrl || undefined,
