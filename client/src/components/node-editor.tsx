@@ -796,10 +796,12 @@ function CoverArtPicker({
             <label className="text-xs text-muted-foreground mb-1 block">Emoji</label>
             <Input
               value={emoji}
-              onChange={(e) => onEmojiChange(e.target.value)}
+              onChange={(e) => {
+                const val = [...e.target.value][0] ?? "";
+                onEmojiChange(val);
+              }}
               placeholder="🎵"
               className="w-24 text-2xl text-center"
-              maxLength={4}
             />
           </div>
           {/* Color swatches */}
