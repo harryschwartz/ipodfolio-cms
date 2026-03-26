@@ -17,6 +17,8 @@ export const nodeMetadata = pgTable("node_metadata", {
   id: uuid("id").defaultRandom().primaryKey(),
   nodeId: uuid("node_id").notNull().references(() => menuNodes.id, { onDelete: "cascade" }),
   coverImageUrl: text("cover_image_url"),
+  coverImagePosition: text("cover_image_position"), // e.g. "50% 30%"
+  coverImageZoom: text("cover_image_zoom"),          // e.g. "1.4"
   coverEmoji: text("cover_emoji"),
   coverColor: text("cover_color"),
   artistName: text("artist_name"),

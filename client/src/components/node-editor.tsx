@@ -144,6 +144,8 @@ export function NodeEditor({
   const [linkUrl, setLinkUrl] = useState(node.metadata?.linkUrl || "");
   const [bodyText, setBodyText] = useState(node.metadata?.bodyText || "");
   const [coverImageUrl, setCoverImageUrl] = useState(node.metadata?.coverImageUrl || "");
+  const [coverImagePosition, setCoverImagePosition] = useState((node.metadata as any)?.coverImagePosition || "50% 50%");
+  const [coverImageZoom, setCoverImageZoom] = useState(parseFloat((node.metadata as any)?.coverImageZoom) || 1);
   const [coverEmoji, setCoverEmoji] = useState((node.metadata as any)?.coverEmoji || "");
   const [coverColor, setCoverColor] = useState((node.metadata as any)?.coverColor || "#6366f1");
   const [coverMode, setCoverMode] = useState<"image" | "emoji">((node.metadata as any)?.coverEmoji ? "emoji" : "image");
@@ -215,6 +217,8 @@ export function NodeEditor({
     setLinkUrl(node.metadata?.linkUrl || "");
     setBodyText(node.metadata?.bodyText || "");
     setCoverImageUrl(node.metadata?.coverImageUrl || "");
+    setCoverImagePosition((node.metadata as any)?.coverImagePosition || "50% 50%");
+    setCoverImageZoom(parseFloat((node.metadata as any)?.coverImageZoom) || 1);
     setCoverEmoji((node.metadata as any)?.coverEmoji || "");
     setCoverColor((node.metadata as any)?.coverColor || "#6366f1");
     setCoverMode((node.metadata as any)?.coverEmoji ? "emoji" : "image");
@@ -238,6 +242,8 @@ export function NodeEditor({
           linkUrl: linkUrl || null,
           bodyText: bodyText || null,
           coverImageUrl: coverMode === "image" ? (coverImageUrl || null) : null,
+          coverImagePosition: coverMode === "image" && coverImageUrl ? coverImagePosition : null,
+          coverImageZoom: coverMode === "image" && coverImageUrl ? String(coverImageZoom) : null,
           coverEmoji: coverMode === "emoji" ? (coverEmoji || null) : null,
           coverColor: coverMode === "emoji" ? (coverColor || null) : null,
           previewImage: previewImage || null,
@@ -430,6 +436,10 @@ export function NodeEditor({
                         imageUrl={coverImageUrl}
                         onImageChange={setCoverImageUrl}
                         onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        imagePosition={coverImagePosition}
+                        onImagePositionChange={setCoverImagePosition}
+                        imageZoom={coverImageZoom}
+                        onImageZoomChange={setCoverImageZoom}
                         emoji={coverEmoji}
                         onEmojiChange={setCoverEmoji}
                         color={coverColor}
@@ -492,6 +502,10 @@ export function NodeEditor({
                         imageUrl={coverImageUrl}
                         onImageChange={setCoverImageUrl}
                         onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        imagePosition={coverImagePosition}
+                        onImagePositionChange={setCoverImagePosition}
+                        imageZoom={coverImageZoom}
+                        onImageZoomChange={setCoverImageZoom}
                         emoji={coverEmoji}
                         onEmojiChange={setCoverEmoji}
                         color={coverColor}
@@ -529,6 +543,10 @@ export function NodeEditor({
                         imageUrl={coverImageUrl}
                         onImageChange={setCoverImageUrl}
                         onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        imagePosition={coverImagePosition}
+                        onImagePositionChange={setCoverImagePosition}
+                        imageZoom={coverImageZoom}
+                        onImageZoomChange={setCoverImageZoom}
                         emoji={coverEmoji}
                         onEmojiChange={setCoverEmoji}
                         color={coverColor}
@@ -752,11 +770,15 @@ const PRESET_COLORS = [
 function CoverArtPicker({
   mode, onModeChange,
   imageUrl, onImageChange, onImageUpload,
+  imagePosition, onImagePositionChange,
+  imageZoom, onImageZoomChange,
   emoji, onEmojiChange,
   color, onColorChange,
 }: {
   mode: "image" | "emoji"; onModeChange: (m: "image" | "emoji") => void;
   imageUrl: string; onImageChange: (u: string) => void; onImageUpload: (f: File) => Promise<void>;
+  imagePosition: string; onImagePositionChange: (p: string) => void;
+  imageZoom: number; onImageZoomChange: (z: number) => void;
   emoji: string; onEmojiChange: (e: string) => void;
   color: string; onColorChange: (c: string) => void;
 }) {
@@ -781,7 +803,15 @@ function CoverArtPicker({
       </div>
 
       {mode === "image" ? (
-        <ImageUploader value={imageUrl} onChange={onImageChange} onUpload={onImageUpload} />
+        <ImageUploader
+          value={imageUrl}
+          onChange={onImageChange}
+          onUpload={onImageUpload}
+          position={imagePosition}
+          onPositionChange={onImagePositionChange}
+          zoom={imageZoom}
+          onZoomChange={onImageZoomChange}
+        />
       ) : (
         <div className="space-y-3">
           {/* Preview */}
@@ -830,20 +860,119 @@ function CoverArtPicker({
   );
 }
 
-function ImageUploader({ value, onChange, onUpload }: { value: string; onChange: (url: string) => void; onUpload: (file: File) => Promise<void> }) {
+function ImageUploader({
+  value, onChange, onUpload,
+  position = "50% 50%", onPositionChange,
+  zoom = 1, onZoomChange,
+}: {
+  value: string; onChange: (url: string) => void; onUpload: (file: File) => Promise<void>;
+  position?: string; onPositionChange?: (p: string) => void;
+  zoom?: number; onZoomChange?: (z: number) => void;
+}) {
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
+  const dragRef = useRef<{ startX: number; startY: number; startPos: [number, number] } | null>(null);
+
+  // Parse "X% Y%" into [x, y] numbers
+  const parsePos = (p: string): [number, number] => {
+    const parts = p.replace(/%/g, "").split(" ").map(Number);
+    return [parts[0] ?? 50, parts[1] ?? 50];
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const [px, py] = parsePos(position);
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startPos: [px, py] };
+
+    const onMove = (me: MouseEvent) => {
+      if (!dragRef.current) return;
+      // Each 2px of mouse movement = 1% of position shift (inverted — drag right moves focal point left)
+      const dx = (dragRef.current.startX - me.clientX) / 2;
+      const dy = (dragRef.current.startY - me.clientY) / 2;
+      const nx = Math.min(100, Math.max(0, dragRef.current.startPos[0] + dx));
+      const ny = Math.min(100, Math.max(0, dragRef.current.startPos[1] + dy));
+      onPositionChange?.(`${Math.round(nx)}% ${Math.round(ny)}%`);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   return (
-    <div>
+    <div className="space-y-3">
       {value ? (
-        <div className="relative rounded-xl overflow-hidden border border-border bg-muted group w-full max-w-xs">
-          <img src={value} alt="" className="w-full aspect-square object-cover" />
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <Button variant="secondary" size="sm" onClick={() => onChange("")} className="gap-2 shadow-lg">
-              <X className="h-3.5 w-3.5" />Remove
-            </Button>
+        <>
+          {/* Preview — drag to reposition if supported */}
+          <div className="space-y-1">
+            {onPositionChange && <p className="text-xs text-muted-foreground">Drag to reposition</p>}
+            <div
+              className={`relative rounded-xl overflow-hidden border border-border bg-muted w-full max-w-xs aspect-square select-none ${onPositionChange ? "cursor-grab active:cursor-grabbing" : ""}`}
+              onMouseDown={onPositionChange ? handleMouseDown : undefined}
+            >
+              <img
+                src={value}
+                alt=""
+                draggable={false}
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                style={{
+                  objectFit: "cover",
+                  objectPosition: position,
+                  transform: zoom !== 1 ? `scale(${zoom})` : undefined,
+                  transformOrigin: position,
+                }}
+              />
+              <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity flex items-end justify-end p-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="gap-1.5 shadow-lg text-xs"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => { onChange(""); onPositionChange?.("50% 50%"); onZoomChange?.(1); }}
+                >
+                  <X className="h-3 w-3" />Remove
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+
+          {/* Zoom slider — only when repositioning is supported */}
+          {onZoomChange && (
+            <div className="space-y-1 max-w-xs">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">Zoom</p>
+                <span className="text-xs text-muted-foreground">{zoom.toFixed(1)}×</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.05}
+                value={zoom}
+                onChange={(e) => onZoomChange(parseFloat(e.target.value))}
+                className="w-full accent-indigo-600"
+              />
+            </div>
+          )}
+
+          {/* Replace image */}
+          <label className="cursor-pointer inline-block">
+            <input type="file" accept="image/*,.heic,.heif" className="hidden" disabled={uploading} onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              setUploading(true);
+              try { await onUpload(f); onPositionChange?.("50% 50%"); onZoomChange?.(1); }
+              catch (err: any) { toast({ title: "Upload failed", description: err.message, variant: "destructive" }); }
+              finally { setUploading(false); }
+            }} />
+            <span className="text-xs text-indigo-600 hover:text-indigo-800 underline underline-offset-2 transition-colors">
+              {uploading ? "Uploading…" : "Replace image"}
+            </span>
+          </label>
+        </>
       ) : (
         <label className={uploading ? "cursor-wait block" : "cursor-pointer block"}>
           <input type="file" accept="image/*,.heic,.heif" className="hidden" disabled={uploading} onChange={async (e) => {

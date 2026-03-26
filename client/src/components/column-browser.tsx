@@ -65,6 +65,7 @@ function ColumnItem({
   isSiblingDragOver,
   isFolderDropTarget,
   onClick,
+  onLongPress,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -338,9 +339,29 @@ export function ColumnBrowser({
   // ── Drag handlers ──────────────────────────────────────────────────────────
 
   const handleDragStart = useCallback((e: React.DragEvent, nodeId: string) => {
+    const dragIds = selectedIds.size > 1 && selectedIds.has(nodeId)
+      ? Array.from(selectedIds)
+      : [nodeId];
+    e.dataTransfer.setData("application/x-node-ids", JSON.stringify(dragIds));
     e.dataTransfer.setData("text/plain", nodeId);
     setDragNodeId(nodeId);
-  }, []);
+
+    if (dragIds.length > 1) {
+      const badge = document.createElement("div");
+      badge.style.cssText = [
+        "position:fixed;top:-999px;left:-999px",
+        "display:flex;align-items:center;gap:6px",
+        "background:#4f46e5;color:#fff;font:600 13px/1 system-ui",
+        "padding:5px 10px 5px 8px;border-radius:999px",
+        "box-shadow:0 2px 8px rgba(0,0,0,0.35)",
+        "pointer-events:none;white-space:nowrap",
+      ].join(";");
+      badge.innerHTML = `<span style="background:rgba(255,255,255,0.25);border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:11px">${dragIds.length}</span><span>items</span>`;
+      document.body.appendChild(badge);
+      e.dataTransfer.setDragImage(badge, -12, badge.offsetHeight / 2);
+      requestAnimationFrame(() => document.body.removeChild(badge));
+    }
+  }, [selectedIds]);
 
   const handleDragOver = useCallback((e: React.DragEvent, nodeId: string) => {
     e.preventDefault();
@@ -377,29 +398,44 @@ export function ColumnBrowser({
     e.stopPropagation();
     setDragOverId(null);
     setDropFolderId(null);
-    const sourceId = e.dataTransfer.getData("text/plain");
-    if (!sourceId || sourceId === targetId) return;
 
-    const sourceNode = nodes.find((n) => n.id === sourceId);
+    let dragIds: string[];
+    try {
+      dragIds = JSON.parse(e.dataTransfer.getData("application/x-node-ids"));
+    } catch {
+      const single = e.dataTransfer.getData("text/plain");
+      dragIds = single ? [single] : [];
+    }
+    if (dragIds.length === 0 || (dragIds.length === 1 && dragIds[0] === targetId)) return;
+
     const targetNode = nodes.find((n) => n.id === targetId);
-    if (!sourceNode || !targetNode) return;
+    if (!targetNode) return;
 
     const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === targetId);
-    const crossParent = sourceNode.parentId !== targetNode.parentId;
 
-    if (targetIsFolder && crossParent) {
+    if (targetIsFolder) {
       const targetChildren = nodes
         .filter((n) => n.parentId === targetId)
         .sort((a, b) => a.sortOrder - b.sortOrder);
-      const newSortOrder = targetChildren.length > 0
+      let nextSortOrder = targetChildren.length > 0
         ? targetChildren[targetChildren.length - 1].sortOrder + 1
         : 0;
-      await apiRequest("PATCH", `/api/nodes/${sourceId}`, {
-        parentId: targetId,
-        sortOrder: newSortOrder,
+      const toMove = dragIds.filter((id) => {
+        const n = nodes.find((x) => x.id === id);
+        return n && id !== targetId && n.parentId !== targetId;
       });
+      await Promise.all(toMove.map((id) =>
+        apiRequest("PATCH", `/api/nodes/${id}`, {
+          parentId: targetId,
+          sortOrder: nextSortOrder++,
+        })
+      ));
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
-    } else if (sourceNode.parentId === targetNode.parentId) {
+    } else if (dragIds.length === 1) {
+      const sourceId = dragIds[0];
+      const sourceNode = nodes.find((n) => n.id === sourceId);
+      if (!sourceNode || sourceNode.parentId !== targetNode.parentId) return;
+
       const siblings = nodes
         .filter((n) => n.parentId === sourceNode.parentId)
         .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -419,22 +455,35 @@ export function ColumnBrowser({
     e.preventDefault();
     setDragOverId(null);
     setDropFolderId(null);
-    const sourceId = e.dataTransfer.getData("text/plain");
-    if (!sourceId) return;
-    const sourceNode = nodes.find((n) => n.id === sourceId);
-    if (!sourceNode) return;
-    if (sourceNode.parentId === targetParentId) return; // already here
+
+    let dragIds: string[];
+    try {
+      dragIds = JSON.parse(e.dataTransfer.getData("application/x-node-ids"));
+    } catch {
+      const single = e.dataTransfer.getData("text/plain");
+      dragIds = single ? [single] : [];
+    }
+    if (dragIds.length === 0) return;
 
     const targetChildren = nodes
       .filter((n) => n.parentId === targetParentId)
       .sort((a, b) => a.sortOrder - b.sortOrder);
-    const newSortOrder = targetChildren.length > 0
+    let nextSortOrder = targetChildren.length > 0
       ? targetChildren[targetChildren.length - 1].sortOrder + 1
       : 0;
-    await apiRequest("PATCH", `/api/nodes/${sourceId}`, {
-      parentId: targetParentId,
-      sortOrder: newSortOrder,
+
+    const toMove = dragIds.filter((id) => {
+      const n = nodes.find((x) => x.id === id);
+      return n && n.parentId !== targetParentId;
     });
+    if (toMove.length === 0) return;
+
+    await Promise.all(toMove.map((id) =>
+      apiRequest("PATCH", `/api/nodes/${id}`, {
+        parentId: targetParentId,
+        sortOrder: nextSortOrder++,
+      })
+    ));
     queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
   }, [nodes]);
 
