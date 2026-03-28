@@ -288,7 +288,9 @@ export function NodeEditor({
     const SUPABASE_URL = "https://xtjjavrixvnwoulgebqp.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0amphdnJpeHZud291bGdlYnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjgxNjIsImV4cCI6MjA4OTU0NDE2Mn0.aSL3bi4__sS1OaeF2_MkTMrOGfHmnHBKxhKP8zd0qAQ";
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const contentType = file instanceof File ? file.type : `audio/${ext}`;
+    // Use the blob's actual MIME type, but strip codec params for the Content-Type header
+    const rawType = file.type || (file instanceof File ? file.type : `audio/${ext}`);
+    const contentType = rawType.split(";")[0] || `audio/${ext}`;
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/cms-assets/${path}`, {
       method: "POST",
       headers: {
@@ -315,7 +317,18 @@ export function NodeEditor({
   };
 
   const handleAudioUpload = async (file: File | Blob) => {
-    const ext = file instanceof File ? (file.name.split(".").pop() || "webm") : "webm";
+    let ext: string;
+    if (file instanceof File) {
+      ext = file.name.split(".").pop() || "webm";
+    } else {
+      // Derive ext from blob MIME type
+      const mimeMap: Record<string, string> = {
+        "audio/mp4": "m4a", "audio/aac": "aac", "audio/ogg": "ogg",
+        "audio/ogg;codecs=opus": "ogg", "audio/wav": "wav",
+        "audio/webm": "webm", "audio/webm;codecs=opus": "webm",
+      };
+      ext = mimeMap[file.type] || "webm";
+    }
     setAudioUrl(await uploadToSupabase(file, ext));
   };
 
@@ -474,7 +487,20 @@ export function NodeEditor({
                             <span className="text-xs text-muted-foreground font-medium">or record in browser</span>
                             <div className="flex-1 border-t border-border" />
                           </div>
-                          <AudioRecorder onRecordingComplete={(blob) => handleAudioUpload(new File([blob], "recording.webm", { type: blob.type }))} />
+                          <AudioRecorder onRecordingComplete={(blob) => {
+                            // Derive extension from actual MIME type (iOS uses mp4, Chrome uses webm)
+                            const mimeToExt: Record<string, string> = {
+                              "audio/webm": "webm",
+                              "audio/webm;codecs=opus": "webm",
+                              "audio/mp4": "m4a",
+                              "audio/aac": "aac",
+                              "audio/ogg": "ogg",
+                              "audio/ogg;codecs=opus": "ogg",
+                              "audio/wav": "wav",
+                            };
+                            const ext = mimeToExt[blob.type] || "webm";
+                            handleAudioUpload(new File([blob], `recording.${ext}`, { type: blob.type }));
+                          }} />
                         </div>
                       )}
                     </FieldGroup>

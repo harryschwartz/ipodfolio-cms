@@ -1,9 +1,32 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, Play, Pause, RotateCcw } from "lucide-react";
+import { Mic, Square, Play, Pause, RotateCcw, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type RecorderState = "idle" | "recording" | "recorded" | "playing";
+
+/**
+ * Pick a MIME type that the current browser's MediaRecorder actually supports.
+ * iOS Safari doesn't support audio/webm — it needs audio/mp4.
+ * Chrome/Firefox prefer audio/webm;codecs=opus.
+ */
+function getSupportedMimeType(): { mimeType: string; ext: string } {
+  const candidates: { mimeType: string; ext: string }[] = [
+    { mimeType: "audio/webm;codecs=opus", ext: "webm" },
+    { mimeType: "audio/webm", ext: "webm" },
+    { mimeType: "audio/mp4", ext: "m4a" },
+    { mimeType: "audio/aac", ext: "aac" },
+    { mimeType: "audio/ogg;codecs=opus", ext: "ogg" },
+    { mimeType: "", ext: "wav" }, // fallback: let browser pick default
+  ];
+
+  for (const c of candidates) {
+    if (c.mimeType === "" || MediaRecorder.isTypeSupported(c.mimeType)) {
+      return c;
+    }
+  }
+  return candidates[candidates.length - 1];
+}
 
 export function AudioRecorder({
   onRecordingComplete,
@@ -12,15 +35,18 @@ export function AudioRecorder({
 }) {
   const [state, setState] = useState<RecorderState>("idle");
   const [recordingTime, setRecordingTime] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const animFrameRef = useRef<number>(0);
   const timerRef = useRef<number>(0);
   const streamRef = useRef<MediaStream | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const mimeRef = useRef<{ mimeType: string; ext: string }>({ mimeType: "", ext: "wav" });
 
   const drawWaveform = useCallback(() => {
     const canvas = canvasRef.current;
@@ -67,17 +93,34 @@ export function AudioRecorder({
   }, []);
 
   const startRecording = useCallback(async () => {
+    setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+
+      // Create AudioContext and resume it (required on iOS/mobile)
       const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      const mediaRecorder = new MediaRecorder(stream);
+      // Pick a MIME type the browser supports
+      const mime = getSupportedMimeType();
+      mimeRef.current = mime;
+
+      const recorderOptions: MediaRecorderOptions = {};
+      if (mime.mimeType) {
+        recorderOptions.mimeType = mime.mimeType;
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, recorderOptions);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -86,14 +129,27 @@ export function AudioRecorder({
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        // Use the actual MIME type from the recorder (may differ from requested)
+        const actualMime = mediaRecorder.mimeType || mime.mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: actualMime });
         setRecordedBlob(blob);
         setState("recorded");
         stream.getTracks().forEach((t) => t.stop());
         cancelAnimationFrame(animFrameRef.current);
+        // Close the AudioContext to free resources on mobile
+        audioContext.close().catch(() => {});
       };
 
-      mediaRecorder.start();
+      mediaRecorder.onerror = (e: Event) => {
+        const errorEvent = e as ErrorEvent;
+        console.error("MediaRecorder error:", errorEvent);
+        setError("Recording failed. Please try again.");
+        setState("idle");
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      // Use timeslice to get data periodically (more reliable on mobile)
+      mediaRecorder.start(1000);
       setState("recording");
       setRecordingTime(0);
       drawWaveform();
@@ -101,8 +157,15 @@ export function AudioRecorder({
       timerRef.current = window.setInterval(() => {
         setRecordingTime((prev) => prev + 1);
       }, 1000);
-    } catch {
-      // Microphone not available
+    } catch (err: any) {
+      console.error("Recording start error:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setError("Microphone access denied. Check your browser settings.");
+      } else if (err.name === "NotFoundError") {
+        setError("No microphone found on this device.");
+      } else {
+        setError(`Could not start recording: ${err.message || "Unknown error"}`);
+      }
     }
   }, [drawWaveform]);
 
@@ -118,7 +181,11 @@ export function AudioRecorder({
     const audio = new Audio(url);
     audioRef.current = audio;
     audio.onended = () => setState("recorded");
-    audio.play();
+    audio.play().catch((err) => {
+      console.error("Playback error:", err);
+      setError("Could not play recording.");
+      setState("recorded");
+    });
     setState("playing");
   }, [recordedBlob]);
 
@@ -129,6 +196,7 @@ export function AudioRecorder({
 
   const reRecord = useCallback(() => {
     setRecordedBlob(null);
+    setError(null);
     setState("idle");
     setRecordingTime(0);
   }, []);
@@ -145,6 +213,7 @@ export function AudioRecorder({
       clearInterval(timerRef.current);
       cancelAnimationFrame(animFrameRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      audioContextRef.current?.close().catch(() => {});
     };
   }, []);
 
@@ -163,6 +232,14 @@ export function AudioRecorder({
         <Mic className="h-3.5 w-3.5" />
         <span>Voice Recorder</span>
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-2.5 text-xs text-destructive">
+          <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Waveform */}
       <canvas
