@@ -29,6 +29,7 @@ import {
   ChevronRight,
   Globe,
   EyeOff,
+  Check,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -160,6 +161,7 @@ export function NodeEditor({
     (node.metadata?.photos as any) || []
   );
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [saveFlash, setSaveFlash] = useState(false);
   const dragCounter = useRef(0);
 
   // Prevent browser from opening dragged files as a new tab,
@@ -257,7 +259,8 @@ export function NodeEditor({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
-      toast({ title: "Saved ✓", description: "Your changes are live." });
+      setSaveFlash(true);
+      setTimeout(() => setSaveFlash(false), 1500);
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -749,10 +752,20 @@ export function NodeEditor({
           onClick={() => updateMutation.mutate()}
           disabled={updateMutation.isPending || isReadOnly}
           data-testid="button-save"
-          className={cn("gap-2 px-6 bg-gradient-to-r border-0 shadow-sm hover:shadow-md transition-all", gradient, "from-opacity-90")}
+          className={cn(
+            "gap-2 px-6 border-0 shadow-sm transition-all duration-300",
+            saveFlash
+              ? "bg-emerald-500 hover:bg-emerald-500"
+              : cn("bg-gradient-to-r hover:shadow-md", gradient, "from-opacity-90")
+          )}
         >
-          <Save className="h-4 w-4" />
-          {updateMutation.isPending ? "Saving…" : "Save Changes"}
+          {saveFlash ? (
+            <><Check className="h-4 w-4" /> Saved</>
+          ) : updateMutation.isPending ? (
+            <>Saving…</>
+          ) : (
+            <><Save className="h-4 w-4" /> Save Changes</>
+          )}
         </Button>
 
         {!isReadOnly && (
