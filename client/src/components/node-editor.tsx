@@ -30,6 +30,17 @@ import {
   Globe,
   EyeOff,
   Check,
+  GripVertical,
+  Folder,
+  Disc3,
+  ListMusic,
+  Image,
+  Video,
+  Link2,
+  FileText,
+  Settings,
+  Gamepad2,
+  Layers,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -121,6 +132,194 @@ function Field({ label, children, hint }: { label: string; children: React.React
       <Label className="text-sm font-semibold text-foreground/75">{label}</Label>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+/* ── Icon + style per child type ── */
+const CHILD_TYPE_ICONS: Record<string, any> = {
+  folder: Folder, song: Music, album: Disc3, playlist: ListMusic,
+  photo_album: Image, video: Video, link: Link2, text: FileText,
+  settings: Settings, game: Gamepad2, cover_flow_home: Layers, cover_flow_music: Layers,
+};
+const CHILD_ICON_STYLE: Record<string, string> = {
+  folder: "bg-amber-100 text-amber-600", song: "bg-emerald-100 text-emerald-600",
+  album: "bg-purple-100 text-purple-600", playlist: "bg-blue-100 text-blue-600",
+  photo_album: "bg-pink-100 text-pink-600", video: "bg-red-100 text-red-600",
+  link: "bg-cyan-100 text-cyan-600", text: "bg-slate-100 text-slate-600",
+  settings: "bg-gray-100 text-gray-500", game: "bg-orange-100 text-orange-600",
+  cover_flow_home: "bg-indigo-100 text-indigo-600", cover_flow_music: "bg-violet-100 text-violet-600",
+};
+
+/* ── ChildrenList: drag-reorder, thumbnails, tap-to-navigate, add ── */
+function ChildrenList({
+  parentId,
+  children,
+  label,
+  onSelectNode,
+  onAddNode,
+}: {
+  parentId: string;
+  children: MenuNodeWithMetadata[];
+  label: string;
+  onSelectNode: (id: string) => void;
+  onAddNode: (parentId: string | null) => void;
+}) {
+  const [items, setItems] = useState(children);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const touchRef = useRef<{ idx: number; startY: number; startTime: number; moved: boolean } | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Sync with prop changes
+  useEffect(() => { setItems(children); }, [children]);
+
+  /* ── Persist reorder ── */
+  const saveOrder = async (ordered: MenuNodeWithMetadata[]) => {
+    const orderedIds = ordered.map((n) => n.id);
+    try {
+      await apiRequest("POST", `/api/nodes/${parentId}/reorder`, { orderedIds });
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+    } catch { /* silent — items already visually updated */ }
+  };
+
+  const reorder = (from: number, to: number) => {
+    if (from === to) return;
+    const next = [...items];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setItems(next);
+    return next;
+  };
+
+  /* ── Mouse drag ── */
+  const handleDragStart = (e: React.DragEvent, idx: number) => {
+    e.dataTransfer.effectAllowed = "move";
+    setDragIdx(idx);
+  };
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setOverIdx(idx);
+  };
+  const handleDrop = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (dragIdx !== null) {
+      const next = reorder(dragIdx, idx);
+      if (next) saveOrder(next);
+    }
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+  const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
+
+  /* ── Touch drag ── */
+  const handleTouchStart = (idx: number, e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchRef.current = { idx, startY: t.clientY, startTime: Date.now(), moved: false };
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchRef.current || !listRef.current) return;
+    const t = e.touches[0];
+    const dy = Math.abs(t.clientY - touchRef.current.startY);
+    if (dy > 10) touchRef.current.moved = true;
+    if (!touchRef.current.moved) return;
+    e.preventDefault();
+    // Find which row we're over
+    const rows = listRef.current.querySelectorAll<HTMLElement>("[data-child-idx]");
+    for (const row of rows) {
+      const rect = row.getBoundingClientRect();
+      if (t.clientY >= rect.top && t.clientY <= rect.bottom) {
+        const targetIdx = parseInt(row.dataset.childIdx!, 10);
+        if (targetIdx !== touchRef.current.idx) {
+          const next = reorder(touchRef.current.idx, targetIdx);
+          touchRef.current.idx = targetIdx;
+          setOverIdx(targetIdx);
+          // Don't save yet — wait for touchEnd
+          if (next) setItems(next);
+        }
+        break;
+      }
+    }
+  };
+  const handleTouchEnd = () => {
+    if (touchRef.current?.moved) {
+      saveOrder(items);
+    }
+    touchRef.current = null;
+    setOverIdx(null);
+  };
+
+  const CoverThumb = ({ node }: { node: MenuNodeWithMetadata }) => {
+    const meta = node.metadata as any;
+    const coverUrl = meta?.coverImageUrl;
+    const emoji = meta?.coverEmoji;
+    const color = meta?.coverColor;
+    const Icon = CHILD_TYPE_ICONS[node.type] || FileText;
+    const iconStyle = CHILD_ICON_STYLE[node.type] || "bg-gray-100 text-gray-500";
+
+    if (coverUrl) {
+      return <img src={coverUrl} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-border/50" />;
+    }
+    if (emoji) {
+      return (
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-sm border border-border/50" style={{ backgroundColor: color || "#f3f4f6" }}>
+          {emoji}
+        </div>
+      );
+    }
+    return (
+      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", iconStyle)}>
+        <Icon className="h-4 w-4" />
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <SectionHeader>{label}</SectionHeader>
+        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-1" onClick={() => onAddNode(parentId)}>
+          <Plus className="h-3 w-3" />Add
+        </Button>
+      </div>
+      <FieldGroup className="p-0 overflow-hidden space-y-0">
+        <div ref={listRef} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
+          {items.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">No {label.toLowerCase()} yet</div>
+          ) : (
+            items.map((child, idx) => (
+              <div
+                key={child.id}
+                data-child-idx={idx}
+                draggable
+                onDragStart={(e) => handleDragStart(e, idx)}
+                onDragOver={(e) => handleDragOver(e, idx)}
+                onDrop={(e) => handleDrop(e, idx)}
+                onDragEnd={handleDragEnd}
+                onTouchStart={(e) => handleTouchStart(idx, e)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 border-b border-border last:border-0 transition-colors cursor-pointer group",
+                  dragIdx === idx && "opacity-40",
+                  overIdx === idx && dragIdx !== idx && "bg-indigo-50",
+                )}
+                onClick={() => {
+                  // Only navigate if we didn't just finish a touch drag
+                  if (!touchRef.current?.moved) onSelectNode(child.id);
+                }}
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground/30 flex-shrink-0 cursor-grab active:cursor-grabbing touch-none" />
+                <CoverThumb node={child} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{child.title}</p>
+                  {child.metadata?.artistName && <p className="text-xs text-muted-foreground truncate">{(child.metadata as any).artistName}</p>}
+                </div>
+                <Badge variant="secondary" className="text-[10px] flex-shrink-0">{TYPE_LABELS[child.type] || child.type}</Badge>
+                <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
+              </div>
+            ))
+          )}
+        </div>
+      </FieldGroup>
     </div>
   );
 }
@@ -542,21 +741,13 @@ export function NodeEditor({
                       />
                     </FieldGroup>
                   </div>
-                  <div>
-                    <SectionHeader>Tracks</SectionHeader>
-                    <FieldGroup className="p-0 overflow-hidden space-y-0">
-                      {allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder).map((child, idx) => (
-                        <div key={child.id} className="flex items-center gap-3 px-4 py-3 hover:bg-purple-50 transition-colors cursor-pointer border-b border-border last:border-0" onClick={() => onSelectNode(child.id)}>
-                          <span className="text-sm text-muted-foreground w-5 text-right tabular-nums">{idx + 1}</span>
-                          <span className="text-sm flex-1 font-medium">{child.title}</span>
-                          <Badge variant="secondary" className="text-xs">{child.type}</Badge>
-                        </div>
-                      ))}
-                      {allNodes.filter((n) => n.parentId === node.id).length === 0 && (
-                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">No tracks yet</div>
-                      )}
-                    </FieldGroup>
-                  </div>
+                  <ChildrenList
+                    parentId={node.id}
+                    children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                    label="Tracks"
+                    onSelectNode={onSelectNode}
+                    onAddNode={onAddNode}
+                  />
                 </>
               )}
 
@@ -583,92 +774,89 @@ export function NodeEditor({
                       />
                     </FieldGroup>
                   </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <SectionHeader>Songs</SectionHeader>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs gap-1 mr-1"
-                        onClick={() => onAddNode(node.id)}
-                      >
-                        <Plus className="h-3 w-3" />
-                        Add Song
-                      </Button>
-                    </div>
-                    <FieldGroup className="p-0 overflow-hidden space-y-0">
-                      {allNodes.filter((n) => n.parentId === node.id && n.type === "song").map((song) => (
-                        <div key={song.id} className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0">
-                          <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                            <Music className="h-3.5 w-3.5 text-emerald-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{song.title}</p>
-                            {song.metadata?.artistName && <p className="text-xs text-muted-foreground truncate">{song.metadata.artistName}</p>}
-                          </div>
-                        </div>
-                      ))}
-                      {allNodes.filter((n) => n.parentId === node.id && n.type === "song").length === 0 && (
-                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">No songs yet</div>
-                      )}
-                    </FieldGroup>
-                  </div>
+                  <ChildrenList
+                    parentId={node.id}
+                    children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                    label="Songs"
+                    onSelectNode={onSelectNode}
+                    onAddNode={onAddNode}
+                  />
                 </>
               )}
 
               {/* ── FOLDER ── */}
               {node.type === "folder" && (
-                <div>
-                  <SectionHeader>Preview Image</SectionHeader>
-                  <FieldGroup>
-                    <ImageUploader value={previewImage} onChange={setPreviewImage} onUpload={(f) => handleImageUpload(f, setPreviewImage)} />
-                  </FieldGroup>
-                  <SectionHeader>Display</SectionHeader>
-                  <FieldGroup>
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        id="split-screen"
-                        checked={splitScreen}
-                        onCheckedChange={setSplitScreen}
-                      />
-                      <Label htmlFor="split-screen" className="text-sm font-semibold">
-                        Split screen layout
-                      </Label>
+                <>
+                  <div>
+                    <SectionHeader>Preview Image</SectionHeader>
+                    <FieldGroup>
+                      <ImageUploader value={previewImage} onChange={setPreviewImage} onUpload={(f) => handleImageUpload(f, setPreviewImage)} />
+                    </FieldGroup>
+                    <div className="mt-6">
+                      <SectionHeader>Display</SectionHeader>
+                      <FieldGroup>
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            id="split-screen"
+                            checked={splitScreen}
+                            onCheckedChange={setSplitScreen}
+                          />
+                          <Label htmlFor="split-screen" className="text-sm font-semibold">
+                            Split screen layout
+                          </Label>
+                        </div>
+                      </FieldGroup>
                     </div>
-                  </FieldGroup>
-                </div>
+                  </div>
+                  <ChildrenList
+                    parentId={node.id}
+                    children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                    label="Children"
+                    onSelectNode={onSelectNode}
+                    onAddNode={onAddNode}
+                  />
+                </>
               )}
 
               {/* ── PHOTO ALBUM ── */}
               {node.type === "photo_album" && (
-                <div>
-                  <SectionHeader>Photos</SectionHeader>
-                  <FieldGroup className="space-y-3">
-                    {photos.map((photo, i) => (
-                      <div key={i} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-background">
-                        <div className="w-14 h-14 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
-                          {photo.url
-                            ? <img src={photo.url} alt={photo.caption || ""} className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center"><Upload className="h-5 w-5 text-muted-foreground" /></div>
-                          }
+                <>
+                  <div>
+                    <SectionHeader>Photos</SectionHeader>
+                    <FieldGroup className="space-y-3">
+                      {photos.map((photo, i) => (
+                        <div key={i} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-background">
+                          <div className="w-14 h-14 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
+                            {photo.url
+                              ? <img src={photo.url} alt={photo.caption || ""} className="w-full h-full object-cover" />
+                              : <div className="w-full h-full flex items-center justify-center"><Upload className="h-5 w-5 text-muted-foreground" /></div>
+                            }
+                          </div>
+                          <Input placeholder="Caption (optional)" value={photo.caption || ""} onChange={(e) => { const u = [...photos]; u[i] = { ...u[i], caption: e.target.value }; setPhotos(u); }} className="flex-1 text-sm h-8" />
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
                         </div>
-                        <Input placeholder="Caption (optional)" value={photo.caption || ""} onChange={(e) => { const u = [...photos]; u[i] = { ...u[i], caption: e.target.value }; setPhotos(u); }} className="flex-1 text-sm h-8" />
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
-                      </div>
-                    ))}
-                    <label className="cursor-pointer block">
-                      <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
-                        const files = e.target.files;
-                        if (!files) return;
-                        await handleFileDrop(Array.from(files));
-                      }} />
-                      <div className={`border-2 border-dashed rounded-lg px-4 py-6 text-center text-sm transition-colors ${isDraggingOver ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-border text-muted-foreground hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
-                        <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
-                        <span>{isDraggingOver ? "Drop to upload" : <>Drop photos here or <span className="text-indigo-600 font-medium">browse</span></>}</span>
-                      </div>
-                    </label>
-                  </FieldGroup>
-                </div>
+                      ))}
+                      <label className="cursor-pointer block">
+                        <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
+                          const files = e.target.files;
+                          if (!files) return;
+                          await handleFileDrop(Array.from(files));
+                        }} />
+                        <div className={`border-2 border-dashed rounded-lg px-4 py-6 text-center text-sm transition-colors ${isDraggingOver ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-border text-muted-foreground hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
+                          <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                          <span>{isDraggingOver ? "Drop to upload" : <>Drop photos here or <span className="text-indigo-600 font-medium">browse</span></>}</span>
+                        </div>
+                      </label>
+                    </FieldGroup>
+                  </div>
+                  <ChildrenList
+                    parentId={node.id}
+                    children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                    label="Children"
+                    onSelectNode={onSelectNode}
+                    onAddNode={onAddNode}
+                  />
+                </>
               )}
 
               {/* ── VIDEO ── */}
