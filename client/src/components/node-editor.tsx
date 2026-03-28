@@ -343,7 +343,7 @@ export function NodeEditor({
   const headerBg = TYPE_HEADER_BG[node.type] || "bg-gradient-to-r from-indigo-50 to-violet-50";
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
       {/* Colored gradient accent stripe */}
       <div className={cn("h-1.5 w-full bg-gradient-to-r flex-shrink-0", gradient)} />
 
@@ -743,7 +743,7 @@ export function NodeEditor({
       </ScrollArea>
 
       {/* Action bar */}
-      <div className="shrink-0 border-t border-border bg-background/80 backdrop-blur-sm px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center justify-between gap-3">
+      <div className="shrink-0 border-t border-border bg-background/80 backdrop-blur-sm px-6 py-3 flex items-center justify-between gap-3">
         <Button
           size="default"
           onClick={() => updateMutation.mutate()}

@@ -309,7 +309,7 @@ export default function Dashboard() {
   if (isMobile) {
     return (
       <div className="flex flex-col h-dvh overflow-hidden bg-background" data-testid="dashboard">
-        <header className="flex items-center justify-between px-4 min-h-14 pt-[env(safe-area-inset-top)] border-b border-border bg-gradient-to-r from-indigo-500 to-violet-600 shrink-0">
+        <header className="flex items-center justify-between px-4 h-14 border-b border-border bg-gradient-to-r from-indigo-500 to-violet-600 shrink-0">
           {mobileView === "editor" && selectedNode ? (
             <button
               onClick={() => setMobileView("tree")}
@@ -368,7 +368,7 @@ export default function Dashboard() {
             </ScrollArea>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             {selectedNode ? (
               <NodeEditor node={selectedNode} allNodes={nodes || []} onSelectNode={handleSelectNode} onAddNode={handleAddNode} />
             ) : (
