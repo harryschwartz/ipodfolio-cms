@@ -332,17 +332,25 @@ export function ContentTree({
   selectedIds,
   onSelectNode,
   onAddNode,
+  searchQuery = "",
 }: {
   nodes: MenuNodeWithMetadata[];
   selectedNodeId: string | null;
   selectedIds: Set<string>;
   onSelectNode: (id: string, mode?: "multi" | "range" | "longpress") => void;
   onAddNode: (parentId: string | null) => void;
+  searchQuery?: string;
 }) {
+  const isSearching = searchQuery.trim().length > 0;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
     const rootFolders = nodes.filter((n) => !n.parentId).map((n) => n.id);
     return new Set(rootFolders);
   });
+
+  // Auto-expand all nodes when searching
+  const effectiveExpanded = isSearching
+    ? new Set(nodes.map((n) => n.id))
+    : expandedIds;
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dropFolderId, setDropFolderId] = useState<string | null>(null);
@@ -489,7 +497,7 @@ export function ContentTree({
           selectedIds={selectedIds}
           onSelectNode={onSelectNode}
           onAddNode={onAddNode}
-          expandedIds={expandedIds}
+          expandedIds={effectiveExpanded}
           toggleExpanded={toggleExpanded}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}

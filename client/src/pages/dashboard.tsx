@@ -1,9 +1,10 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, ChevronLeft, ChevronRight, Plus, Sparkles, List, Columns2, Trash2, Globe, EyeOff, FolderInput, CornerDownRight, Folder, Disc3, ListMusic, Image, X } from "lucide-react";
+import { ExternalLink, ChevronLeft, ChevronRight, Plus, Sparkles, List, Columns2, Trash2, Globe, EyeOff, FolderInput, CornerDownRight, Folder, Disc3, ListMusic, Image, X, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { ContentTree } from "@/components/content-tree";
 import { NodeEditor } from "@/components/node-editor";
 import { AddNodeDialog } from "@/components/add-node-dialog";
@@ -81,6 +82,28 @@ function ViewToggle({
   );
 }
 
+function SearchBar({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return (
+    <div className={cn("relative", className)}>
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50 pointer-events-none" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search content…"
+        className="pl-9 pr-8 h-9 text-sm bg-muted/40 border-border/50 rounded-xl focus-visible:ring-indigo-500/30"
+      />
+      {value && (
+        <button
+          onClick={() => onChange("")}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function SidebarHeader({
   onPreview,
   viewMode,
@@ -130,21 +153,41 @@ function ColumnTopBar({
   viewMode,
   onViewModeChange,
   onAddNode,
+  searchQuery,
+  onSearchChange,
 }: {
   onPreview: () => void;
   viewMode: ViewMode;
   onViewModeChange: (v: ViewMode) => void;
   onAddNode: () => void;
+  searchQuery: string;
+  onSearchChange: (v: string) => void;
 }) {
   return (
     <div className="shrink-0 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-600 px-4 py-3 flex items-center gap-3 shadow-md">
-      <div className="flex items-center gap-2.5 mr-auto">
+      <div className="flex items-center gap-2.5 mr-2">
         <div className="w-7 h-7 rounded-xl bg-white/20 flex items-center justify-center">
           <IpodIcon size={15} className="text-white" />
         </div>
         <div>
           <h1 className="text-sm font-bold leading-tight text-white tracking-tight">iPodfolio CMS</h1>
         </div>
+      </div>
+
+      {/* Inline search */}
+      <div className="relative flex-1 max-w-xs">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 pointer-events-none" />
+        <input
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search…"
+          className="w-full pl-9 pr-8 h-8 text-sm bg-white/15 text-white placeholder:text-white/40 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 focus:bg-white/20 transition-all"
+        />
+        {searchQuery && (
+          <button onClick={() => onSearchChange("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition-colors">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       <ViewToggle viewMode={viewMode} onChange={onViewModeChange} />
@@ -179,6 +222,7 @@ export default function Dashboard() {
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [mobileView, setMobileView] = useState<MobileView>("tree");
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
+  const [searchQuery, setSearchQuery] = useState("");
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const lastSelectedIdRef = useRef<string | null>(null);
@@ -188,6 +232,34 @@ export default function Dashboard() {
   });
 
   const selectedNode = nodes?.find((n) => n.id === selectedNodeId);
+
+  // Search filtering: match title, artist, album, type
+  const filteredNodes = useMemo(() => {
+    if (!nodes || !searchQuery.trim()) return nodes || [];
+    const q = searchQuery.toLowerCase().trim();
+    // Find all nodes that match the query
+    const matchIds = new Set<string>();
+    for (const n of nodes) {
+      const meta = n.metadata as any;
+      const haystack = [
+        n.title,
+        meta?.artistName,
+        meta?.albumName,
+        n.type,
+      ].filter(Boolean).join(" ").toLowerCase();
+      if (haystack.includes(q)) matchIds.add(n.id);
+    }
+    // Also include ancestor nodes so tree structure stays intact
+    const withAncestors = new Set(matchIds);
+    for (const id of matchIds) {
+      let cur = nodes.find((n) => n.id === id)?.parentId;
+      while (cur) {
+        withAncestors.add(cur);
+        cur = nodes.find((n) => n.id === cur)?.parentId;
+      }
+    }
+    return nodes.filter((n) => withAncestors.has(n.id));
+  }, [nodes, searchQuery]);
 
   // Returns a flat list of all visible node IDs in display order (for range selection)
   const getVisibleIds = useCallback((): string[] => {
@@ -349,6 +421,9 @@ export default function Dashboard() {
 
         {mobileView === "tree" ? (
           <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-3 pt-3 pb-1 shrink-0">
+              <SearchBar value={searchQuery} onChange={setSearchQuery} />
+            </div>
             <ScrollArea className="flex-1">
               {isLoading ? (
                 <div className="p-4 space-y-2">
@@ -356,13 +431,19 @@ export default function Dashboard() {
                     <Skeleton key={i} className="h-10 w-full rounded-lg" />
                   ))}
                 </div>
+              ) : filteredNodes.length === 0 && searchQuery.trim() ? (
+                <div className="px-4 py-12 text-center">
+                  <Search className="h-8 w-8 text-muted-foreground/20 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No results for "{searchQuery}"</p>
+                </div>
               ) : (
                 <ContentTree
-                  nodes={nodes || []}
+                  nodes={filteredNodes}
                   selectedNodeId={selectedNodeId}
                   selectedIds={selectedIds}
                   onSelectNode={handleSelectNode}
                   onAddNode={handleAddNode}
+                  searchQuery={searchQuery}
                 />
               )}
             </ScrollArea>
@@ -418,6 +499,8 @@ export default function Dashboard() {
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           onAddNode={() => handleAddNode(null)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
 
         <div className="flex-1 overflow-hidden">
@@ -433,7 +516,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <ColumnBrowser
-              nodes={nodes || []}
+              nodes={filteredNodes}
               selectedNodeId={selectedNodeId}
               selectedIds={selectedIds}
               onSelectNode={handleSelectNode}
@@ -484,8 +567,8 @@ export default function Dashboard() {
           onViewModeChange={handleViewModeChange}
         />
 
-        {/* Add Collection Button */}
-        <div className="px-3 pt-3 pb-1 shrink-0">
+        {/* Add + Search */}
+        <div className="px-3 pt-3 pb-1 shrink-0 space-y-2">
           <Button
             data-testid="button-add-root-node"
             onClick={() => handleAddNode(null)}
@@ -494,6 +577,7 @@ export default function Dashboard() {
             <Plus className="h-3.5 w-3.5" />
             New Collection
           </Button>
+          <SearchBar value={searchQuery} onChange={setSearchQuery} />
         </div>
 
         {/* Content Tree */}
@@ -504,14 +588,20 @@ export default function Dashboard() {
                 <Skeleton key={i} className="h-9 w-full rounded-lg" />
               ))}
             </div>
+          ) : filteredNodes.length === 0 && searchQuery.trim() ? (
+            <div className="px-4 py-12 text-center">
+              <Search className="h-8 w-8 text-muted-foreground/20 mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">No results for "{searchQuery}"</p>
+            </div>
           ) : (
             <div className="py-2">
               <ContentTree
-                nodes={nodes || []}
+                nodes={filteredNodes}
                 selectedNodeId={selectedNodeId}
                 selectedIds={selectedIds}
                 onSelectNode={handleSelectNode}
                 onAddNode={handleAddNode}
+                searchQuery={searchQuery}
               />
             </div>
           )}
