@@ -212,16 +212,18 @@ function ChildrenList({
   };
   const handleDragEnd = () => { setDragIdx(null); setOverIdx(null); };
 
-  /* ── Touch drag ── */
-  const handleTouchStart = (idx: number, e: React.TouchEvent) => {
+  /* ── Touch drag (handle-only) ── */
+  const handleGripTouchStart = (idx: number, e: React.TouchEvent) => {
+    e.stopPropagation();
     const t = e.touches[0];
     touchRef.current = { idx, startY: t.clientY, startTime: Date.now(), moved: false };
+    setDragIdx(idx);
   };
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchRef.current || !listRef.current) return;
     const t = e.touches[0];
     const dy = Math.abs(t.clientY - touchRef.current.startY);
-    if (dy > 10) touchRef.current.moved = true;
+    if (dy > 5) touchRef.current.moved = true;
     if (!touchRef.current.moved) return;
     e.preventDefault();
     // Find which row we're over
@@ -234,7 +236,6 @@ function ChildrenList({
           const next = reorder(touchRef.current.idx, targetIdx);
           touchRef.current.idx = targetIdx;
           setOverIdx(targetIdx);
-          // Don't save yet — wait for touchEnd
           if (next) setItems(next);
         }
         break;
@@ -246,6 +247,7 @@ function ChildrenList({
       saveOrder(items);
     }
     touchRef.current = null;
+    setDragIdx(null);
     setOverIdx(null);
   };
 
@@ -296,10 +298,9 @@ function ChildrenList({
                 onDragOver={(e) => handleDragOver(e, idx)}
                 onDrop={(e) => handleDrop(e, idx)}
                 onDragEnd={handleDragEnd}
-                onTouchStart={(e) => handleTouchStart(idx, e)}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 border-b border-border last:border-0 transition-colors cursor-pointer group",
-                  dragIdx === idx && "opacity-40",
+                  dragIdx === idx && "opacity-40 scale-[1.02] shadow-md z-10 relative bg-white rounded-lg",
                   overIdx === idx && dragIdx !== idx && "bg-indigo-50",
                 )}
                 onClick={() => {
@@ -307,7 +308,13 @@ function ChildrenList({
                   if (!touchRef.current?.moved) onSelectNode(child.id);
                 }}
               >
-                <GripVertical className="h-4 w-4 text-muted-foreground/30 flex-shrink-0 cursor-grab active:cursor-grabbing touch-none" />
+                <div
+                  className="flex items-center justify-center w-8 h-10 -ml-1 flex-shrink-0 cursor-grab active:cursor-grabbing"
+                  style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties}
+                  onTouchStart={(e) => handleGripTouchStart(idx, e)}
+                >
+                  <GripVertical className="h-4 w-4 text-muted-foreground/30" />
+                </div>
                 <CoverThumb node={child} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{child.title}</p>
