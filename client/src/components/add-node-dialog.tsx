@@ -20,6 +20,8 @@ import {
   Link2,
   FileText,
   ChevronLeft,
+  ChevronRight,
+  CornerDownRight,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -109,7 +111,18 @@ const NODE_TYPES = [
   },
 ];
 
-type Step = "type" | "form";
+const FOLDER_TYPES = new Set(["folder", "album", "playlist", "photo_album"]);
+
+const TYPE_ICONS: Record<string, any> = {
+  folder: Folder, song: Music, album: Disc3, playlist: ListMusic,
+  photo_album: Image, video: Video, link: Link2, text: FileText,
+};
+const TYPE_ICON_BG: Record<string, string> = {
+  folder: "bg-amber-100 text-amber-600", album: "bg-purple-100 text-purple-600",
+  playlist: "bg-blue-100 text-blue-600", photo_album: "bg-pink-100 text-pink-600",
+};
+
+type Step = "type" | "form" | "location";
 
 export function AddNodeDialog({
   open,
@@ -132,8 +145,10 @@ export function AddNodeDialog({
   const [albumName, setAlbumName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [bodyText, setBodyText] = useState("");
+  // Location picker state
+  const [browsingId, setBrowsingId] = useState<string | null>(null);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(parentId);
 
-  const parentNode = parentId ? allNodes.find((n) => n.id === parentId) : null;
   const selectedConfig = NODE_TYPES.find((t) => t.type === selectedType);
 
   const resetForm = () => {
@@ -144,13 +159,15 @@ export function AddNodeDialog({
     setAlbumName("");
     setLinkUrl("");
     setBodyText("");
+    setBrowsingId(null);
+    setSelectedParentId(parentId);
   };
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const siblings = allNodes.filter((n) => n.parentId === parentId);
+      const siblings = allNodes.filter((n) => n.parentId === selectedParentId);
       const body: any = {
-        parentId,
+        parentId: selectedParentId,
         type: selectedType,
         title,
         sortOrder: siblings.length,
@@ -166,7 +183,7 @@ export function AddNodeDialog({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
-      toast({ title: "Created ✨", description: `"${title}" is ready to edit.` });
+      toast({ title: "Created", description: `"${title}" is ready to edit.` });
       onNodeCreated(data.id);
       resetForm();
     },
@@ -174,6 +191,33 @@ export function AddNodeDialog({
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  // Build breadcrumb path for the current browsing location
+  const getBreadcrumb = (id: string | null): MenuNodeWithMetadata[] => {
+    const path: MenuNodeWithMetadata[] = [];
+    let current = id;
+    while (current) {
+      const node = allNodes.find((n) => n.id === current);
+      if (!node) break;
+      path.unshift(node);
+      current = node.parentId;
+    }
+    return path;
+  };
+
+  // Children of current browsing folder (only folder-like types)
+  const currentChildren = allNodes
+    .filter((n) => n.parentId === browsingId && FOLDER_TYPES.has(n.type))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const breadcrumb = getBreadcrumb(browsingId);
+
+  // Resolve display name for selectedParentId
+  const getLocationLabel = (pid: string | null) => {
+    if (pid === null) return "Top level";
+    const n = allNodes.find((x) => x.id === pid);
+    return n ? n.title : "Unknown";
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm(); }}>
@@ -183,9 +227,7 @@ export function AddNodeDialog({
             {/* Gradient header */}
             <div className="bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 px-6 py-5">
               <DialogTitle className="text-white text-base font-bold">What are you creating?</DialogTitle>
-              <p className="text-white/65 text-sm mt-0.5">
-                {parentNode ? `Inside "${parentNode.title}"` : "At the root level"}
-              </p>
+              <p className="text-white/65 text-sm mt-0.5">Pick a content type</p>
             </div>
 
             {/* Type grid */}
@@ -211,7 +253,7 @@ export function AddNodeDialog({
               ))}
             </div>
           </>
-        ) : (
+        ) : step === "form" ? (
           <>
             {/* Gradient header based on selected type */}
             {selectedConfig && (
@@ -289,10 +331,147 @@ export function AddNodeDialog({
                 </Button>
                 <Button
                   size="default"
+                  onClick={() => {
+                    // Open location picker - start from top level
+                    setBrowsingId(null);
+                    setSelectedParentId(parentId);
+                    setStep("location");
+                  }}
+                  disabled={!title.trim()}
+                  data-testid="button-next-location"
+                  className={cn("px-6 gap-2 bg-gradient-to-r border-0 shadow-sm", selectedConfig?.gradient)}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Location picker header */}
+            {selectedConfig && (
+              <div className={cn("bg-gradient-to-br px-6 py-5", selectedConfig.gradient, "from-opacity-80")}>
+                <button
+                  onClick={() => setStep("form")}
+                  className="flex items-center gap-1.5 text-white/70 hover:text-white text-xs font-medium mb-3 transition-colors"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Back
+                </button>
+                <DialogTitle className="text-white text-base font-bold">Where should it live?</DialogTitle>
+                <p className="text-white/65 text-sm mt-0.5">
+                  Choose a location for "{title}"
+                </p>
+              </div>
+            )}
+
+            <div className="flex flex-col max-h-[50vh]">
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1 px-5 pt-4 pb-2 text-xs text-muted-foreground flex-wrap">
+                <button
+                  onClick={() => setBrowsingId(null)}
+                  className={cn(
+                    "font-medium transition-colors",
+                    browsingId === null ? "text-foreground" : "hover:text-foreground"
+                  )}
+                >
+                  Root
+                </button>
+                {breadcrumb.map((node) => (
+                  <span key={node.id} className="flex items-center gap-1">
+                    <ChevronRight className="h-3 w-3 opacity-40" />
+                    <button
+                      onClick={() => setBrowsingId(node.id)}
+                      className={cn(
+                        "font-medium transition-colors",
+                        browsingId === node.id ? "text-foreground" : "hover:text-foreground"
+                      )}
+                    >
+                      {node.title}
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              {/* Folder list */}
+              <div className="overflow-y-auto flex-1 px-3 pb-2">
+                {/* "Place here" button */}
+                <button
+                  onClick={() => setSelectedParentId(browsingId)}
+                  className={cn(
+                    "w-full text-left px-4 py-3 text-sm rounded-xl transition-all flex items-center gap-3 mb-1",
+                    selectedParentId === browsingId
+                      ? "bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold"
+                      : "hover:bg-muted border border-transparent text-muted-foreground"
+                  )}
+                >
+                  <CornerDownRight className="h-4 w-4 flex-shrink-0" />
+                  Place here{browsingId ? "" : " (top level)"}
+                </button>
+
+                {/* Drillable folders */}
+                {currentChildren.map((node) => {
+                  const Icon = TYPE_ICONS[node.type] || Folder;
+                  const iconBg = TYPE_ICON_BG[node.type] || "bg-gray-100 text-gray-500";
+                  const meta = node.metadata as any;
+                  const coverUrl = meta?.coverImageUrl;
+
+                  return (
+                    <div
+                      key={node.id}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors cursor-pointer group"
+                    >
+                      {/* Tap folder name to drill in */}
+                      <button
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        onClick={() => setBrowsingId(node.id)}
+                      >
+                        {coverUrl ? (
+                          <img src={coverUrl} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-border/50" />
+                        ) : (
+                          <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", iconBg)}>
+                            <Icon className="h-4 w-4" />
+                          </div>
+                        )}
+                        <span className="text-sm font-medium truncate">{node.title}</span>
+                      </button>
+                      {/* Select as destination */}
+                      <button
+                        onClick={() => setSelectedParentId(node.id)}
+                        className={cn(
+                          "text-xs px-2.5 py-1 rounded-lg border transition-colors flex-shrink-0",
+                          selectedParentId === node.id
+                            ? "bg-indigo-100 border-indigo-300 text-indigo-700 font-semibold"
+                            : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        {selectedParentId === node.id ? "Selected" : "Select"}
+                      </button>
+                      <ChevronRight
+                        className="h-4 w-4 text-muted-foreground/30 flex-shrink-0 cursor-pointer hover:text-muted-foreground"
+                        onClick={() => setBrowsingId(node.id)}
+                      />
+                    </div>
+                  );
+                })}
+
+                {currentChildren.length === 0 && browsingId !== null && (
+                  <p className="text-xs text-muted-foreground text-center py-4">No sub-folders here</p>
+                )}
+              </div>
+
+              {/* Create button */}
+              <div className="px-5 py-4 border-t border-border flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground truncate">
+                  Placing in: <span className="font-semibold text-foreground">{getLocationLabel(selectedParentId)}</span>
+                </p>
+                <Button
+                  size="default"
                   onClick={() => createMutation.mutate()}
                   disabled={!title.trim() || createMutation.isPending}
                   data-testid="button-create-node"
-                  className={cn("px-6 gap-2 bg-gradient-to-r border-0 shadow-sm", selectedConfig?.gradient)}
+                  className={cn("px-6 gap-2 bg-gradient-to-r border-0 shadow-sm flex-shrink-0", selectedConfig?.gradient)}
                 >
                   {createMutation.isPending ? "Creating…" : "Create"}
                 </Button>

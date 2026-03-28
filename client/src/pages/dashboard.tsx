@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExternalLink, ChevronLeft, Plus, Sparkles, List, Columns2, Trash2, Globe, EyeOff, FolderInput, X } from "lucide-react";
+import { ExternalLink, ChevronLeft, ChevronRight, Plus, Sparkles, List, Columns2, Trash2, Globe, EyeOff, FolderInput, CornerDownRight, Folder, Disc3, ListMusic, Image, X } from "lucide-react";
 import { ContentTree } from "@/components/content-tree";
 import { NodeEditor } from "@/components/node-editor";
 import { AddNodeDialog } from "@/components/add-node-dialog";
@@ -594,6 +594,15 @@ function BulkActionBar({
   );
 }
 
+const MOVE_FOLDER_TYPES = new Set(["folder", "album", "playlist", "photo_album"]);
+const MOVE_TYPE_ICONS: Record<string, any> = {
+  folder: Folder, album: Disc3, playlist: ListMusic, photo_album: Image,
+};
+const MOVE_TYPE_ICON_BG: Record<string, string> = {
+  folder: "bg-amber-100 text-amber-600", album: "bg-purple-100 text-purple-600",
+  playlist: "bg-blue-100 text-blue-600", photo_album: "bg-pink-100 text-pink-600",
+};
+
 function MoveDialog({
   open, onClose, nodes, selectedIds, onMove,
 }: {
@@ -603,33 +612,136 @@ function MoveDialog({
   selectedIds: Set<string>;
   onMove: (parentId: string | null) => void;
 }) {
+  const [browsingId, setBrowsingId] = useState<string | null>(null);
+  // undefined = nothing selected yet, null = top level, string = folder id
+  const [selectedTarget, setSelectedTarget] = useState<string | null | undefined>(undefined);
+
   if (!open) return null;
-  const folders = nodes.filter((n) =>
-    ["folder", "album", "playlist", "photo_album"].includes(n.type) && !selectedIds.has(n.id)
-  );
+
+  const currentChildren = nodes
+    .filter((n) => n.parentId === browsingId && MOVE_FOLDER_TYPES.has(n.type) && !selectedIds.has(n.id))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // Build breadcrumb
+  const breadcrumb: MenuNodeWithMetadata[] = [];
+  let cur: string | null = browsingId;
+  while (cur) {
+    const node = nodes.find((n) => n.id === cur);
+    if (!node) break;
+    breadcrumb.unshift(node);
+    cur = node.parentId;
+  }
+
+  const handleMove = () => {
+    if (selectedTarget === undefined) return;
+    onMove(selectedTarget);
+    setBrowsingId(null);
+    setSelectedTarget(undefined);
+  };
+
+  const handleClose = () => {
+    onClose();
+    setBrowsingId(null);
+    setSelectedTarget(undefined);
+  };
+
+  const getLabel = (id: string | null) => {
+    if (id === null) return "Top level";
+    return nodes.find((n) => n.id === id)?.title || "Unknown";
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-background rounded-2xl shadow-2xl border border-border w-80 max-h-[60vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={handleClose}>
+      <div className="bg-background rounded-2xl shadow-2xl border border-border w-[340px] max-h-[65vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h3 className="font-semibold text-sm">Move to…</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          <button onClick={handleClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
         </div>
-        <div className="overflow-y-auto flex-1 py-1">
-          <button
-            onClick={() => onMove(null)}
-            className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors flex items-center gap-2"
-          >
-            <span className="text-muted-foreground">📁</span> Top level (no parent)
+
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1 px-4 pt-3 pb-1 text-xs text-muted-foreground flex-wrap">
+          <button onClick={() => setBrowsingId(null)} className={cn("font-medium transition-colors", browsingId === null ? "text-foreground" : "hover:text-foreground")}>
+            Root
           </button>
-          {folders.map((n) => (
-            <button
-              key={n.id}
-              onClick={() => onMove(n.id)}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors flex items-center gap-2"
-            >
-              <span className="text-muted-foreground">📁</span> {n.title}
-            </button>
+          {breadcrumb.map((node) => (
+            <span key={node.id} className="flex items-center gap-1">
+              <ChevronRight className="h-3 w-3 opacity-40" />
+              <button onClick={() => setBrowsingId(node.id)} className={cn("font-medium transition-colors", browsingId === node.id ? "text-foreground" : "hover:text-foreground")}>
+                {node.title}
+              </button>
+            </span>
           ))}
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-3 py-2">
+          {/* Place here */}
+          <button
+            onClick={() => setSelectedTarget(browsingId)}
+            className={cn(
+              "w-full text-left px-4 py-3 text-sm rounded-xl transition-all flex items-center gap-3 mb-1",
+              selectedTarget === browsingId
+                ? "bg-indigo-50 border border-indigo-200 text-indigo-700 font-semibold"
+                : "hover:bg-muted border border-transparent text-muted-foreground"
+            )}
+          >
+            <CornerDownRight className="h-4 w-4 flex-shrink-0" />
+            Place here{browsingId ? "" : " (top level)"}
+          </button>
+
+          {/* Drillable folders */}
+          {currentChildren.map((node) => {
+            const Icon = MOVE_TYPE_ICONS[node.type] || Folder;
+            const iconBg = MOVE_TYPE_ICON_BG[node.type] || "bg-gray-100 text-gray-500";
+            const meta = node.metadata as any;
+            const coverUrl = meta?.coverImageUrl;
+            return (
+              <div key={node.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <button className="flex items-center gap-3 flex-1 min-w-0 text-left" onClick={() => setBrowsingId(node.id)}>
+                  {coverUrl ? (
+                    <img src={coverUrl} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-border/50" />
+                  ) : (
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", iconBg)}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                  )}
+                  <span className="text-sm font-medium truncate">{node.title}</span>
+                </button>
+                <button
+                  onClick={() => setSelectedTarget(node.id)}
+                  className={cn(
+                    "text-xs px-2.5 py-1 rounded-lg border transition-colors flex-shrink-0",
+                    selectedTarget === node.id
+                      ? "bg-indigo-100 border-indigo-300 text-indigo-700 font-semibold"
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {selectedTarget === node.id ? "Selected" : "Select"}
+                </button>
+                <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" onClick={() => setBrowsingId(node.id)} />
+              </div>
+            );
+          })}
+
+          {currentChildren.length === 0 && browsingId !== null && (
+            <p className="text-xs text-muted-foreground text-center py-4">No sub-folders here</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-border flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground truncate">
+            {selectedTarget !== undefined
+              ? <>Moving to: <span className="font-semibold text-foreground">{getLabel(selectedTarget)}</span></>
+              : "Select a destination"}
+          </p>
+          <Button
+            size="sm"
+            onClick={handleMove}
+            disabled={selectedTarget === undefined}
+            className="px-5 bg-indigo-600 hover:bg-indigo-700 flex-shrink-0"
+          >
+            Move
+          </Button>
         </div>
       </div>
     </div>
