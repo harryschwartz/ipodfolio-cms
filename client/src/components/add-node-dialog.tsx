@@ -164,10 +164,11 @@ export function AddNodeDialog({
   };
 
   const createMutation = useMutation({
-    mutationFn: async () => {
-      const siblings = allNodes.filter((n) => n.parentId === selectedParentId);
+    mutationFn: async (overrideParentId?: string | null) => {
+      const effectiveParentId = overrideParentId !== undefined ? overrideParentId : selectedParentId;
+      const siblings = allNodes.filter((n) => n.parentId === effectiveParentId);
       const body: any = {
-        parentId: selectedParentId,
+        parentId: effectiveParentId,
         type: selectedType,
         title,
         sortOrder: siblings.length,
@@ -332,17 +333,24 @@ export function AddNodeDialog({
                 <Button
                   size="default"
                   onClick={() => {
-                    // Open location picker - start from top level
-                    setBrowsingId(null);
-                    setSelectedParentId(parentId);
-                    setStep("location");
+                    if (parentId) {
+                      // Opened from inside an editor — create as child immediately
+                      createMutation.mutate(parentId);
+                    } else {
+                      // Opened from top-level — show location picker
+                      setBrowsingId(null);
+                      setSelectedParentId(parentId);
+                      setStep("location");
+                    }
                   }}
-                  disabled={!title.trim()}
+                  disabled={!title.trim() || createMutation.isPending}
                   data-testid="button-next-location"
                   className={cn("px-6 gap-2 bg-gradient-to-r border-0 shadow-sm", selectedConfig?.gradient)}
                 >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
+                  {parentId
+                    ? createMutation.isPending ? "Creating…" : "Create"
+                    : <>Next <ChevronRight className="h-4 w-4" /></>
+                  }
                 </Button>
               </div>
             </div>
