@@ -243,7 +243,7 @@ export default function Dashboard() {
       setSelectedIds(new Set());
       lastSelectedIdRef.current = id;
       setSelectedNodeId(id);
-      if (isMobile && id) setMobileView("editor");
+      if (isMobile) setMobileView(id ? "editor" : "tree");
     }
   }, [getVisibleIds, isMobile]);
 
