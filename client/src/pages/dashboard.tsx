@@ -308,8 +308,8 @@ export default function Dashboard() {
   // ─── MOBILE LAYOUT ───
   if (isMobile) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-background" data-testid="dashboard">
-        <header className="flex items-center justify-between px-4 h-14 border-b border-border bg-gradient-to-r from-indigo-500 to-violet-600 shrink-0">
+      <div className="flex flex-col h-dvh overflow-hidden bg-background" data-testid="dashboard">
+        <header className="flex items-center justify-between px-4 min-h-14 pt-[env(safe-area-inset-top)] border-b border-border bg-gradient-to-r from-indigo-500 to-violet-600 shrink-0">
           {mobileView === "editor" && selectedNode ? (
             <button
               onClick={() => setMobileView("tree")}

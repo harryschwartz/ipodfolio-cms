@@ -405,8 +405,8 @@ export function NodeEditor({
         </div>
       </div>
 
-      <ScrollArea className="flex-1 bg-background">
-        <div className="max-w-2xl mx-auto px-6 py-6 pb-24 space-y-6">
+      <ScrollArea className="flex-1 min-h-0 bg-background">
+        <div className="max-w-2xl mx-auto px-6 py-6 pb-8 space-y-6">
 
           {isReadOnly && (
             <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 flex items-start gap-3">
@@ -743,7 +743,7 @@ export function NodeEditor({
       </ScrollArea>
 
       {/* Action bar */}
-      <div className="shrink-0 border-t border-border bg-white/80 backdrop-blur-sm px-6 py-3 flex items-center justify-between gap-3">
+      <div className="shrink-0 border-t border-border bg-background/80 backdrop-blur-sm px-6 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center justify-between gap-3">
         <Button
           size="default"
           onClick={() => updateMutation.mutate()}
