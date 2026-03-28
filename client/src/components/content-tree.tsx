@@ -15,8 +15,11 @@ import {
   Layers,
   GripVertical,
   Plus,
+  Globe,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -73,6 +76,66 @@ function isFolder(node: MenuNodeWithMetadata, nodes: MenuNodeWithMetadata[]): bo
   return FOLDER_TYPES.has(node.type) || nodes.some((n) => n.parentId === node.id);
 }
 
+/** Small cover art thumbnail or emoji fallback */
+function CoverThumb({ node }: { node: MenuNodeWithMetadata }) {
+  const meta = node.metadata as any;
+  const coverUrl = meta?.coverImageUrl;
+  const emoji = meta?.coverEmoji;
+  const color = meta?.coverColor;
+
+  if (coverUrl) {
+    return (
+      <img
+        src={coverUrl}
+        alt=""
+        className="w-10 h-10 md:w-8 md:h-8 rounded-lg object-cover flex-shrink-0 border border-border/50"
+      />
+    );
+  }
+
+  if (emoji) {
+    return (
+      <div
+        className="w-10 h-10 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-base md:text-sm border border-border/50"
+        style={{ backgroundColor: color || "#f3f4f6" }}
+      >
+        {emoji}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/** Inline publish toggle */
+function PublishDot({
+  node,
+  onClick,
+}: {
+  node: MenuNodeWithMetadata;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const isPublished = node.status === "published";
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1 px-1.5 py-1 rounded-full text-[10px] font-semibold transition-all flex-shrink-0",
+        isPublished
+          ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+          : "text-muted-foreground bg-muted/50 hover:bg-muted"
+      )}
+      title={isPublished ? "Published — tap to unpublish" : "Draft — tap to publish"}
+    >
+      {isPublished ? (
+        <Globe className="h-3 w-3" />
+      ) : (
+        <EyeOff className="h-3 w-3" />
+      )}
+    </button>
+  );
+}
+
 function TreeNode({
   node,
   nodes,
@@ -89,6 +152,7 @@ function TreeNode({
   onDrop,
   dragOverId,
   dropFolderId,
+  onTogglePublish,
 }: {
   node: MenuNodeWithMetadata;
   nodes: MenuNodeWithMetadata[];
@@ -105,6 +169,7 @@ function TreeNode({
   onDrop: (e: React.DragEvent, nodeId: string) => void;
   dragOverId: string | null;
   dropFolderId: string | null;
+  onTogglePublish: (node: MenuNodeWithMetadata) => void;
 }) {
   const Icon = TYPE_ICONS[node.type] || FileText;
   const iconStyle = TYPE_ICON_STYLE[node.type] || "bg-gray-100 text-gray-500";
@@ -115,9 +180,10 @@ function TreeNode({
   const isMultiSelected = selectedIds.has(node.id);
   const isSiblingDragOver = node.id === dragOverId;
   const isFolderDropTarget = node.id === dropFolderId;
-  const isPublished = node.status === "published";
+  const isMobile = useIsMobile();
+  const hasCover = (node.metadata as any)?.coverImageUrl || (node.metadata as any)?.coverEmoji;
 
-  // Long-press for mobile multi-select
+  // Long-press for mobile multi-select (increased threshold for reliability)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPress = useRef(false);
   const handleTouchStart = () => {
@@ -125,7 +191,7 @@ function TreeNode({
     longPressTimer.current = setTimeout(() => {
       didLongPress.current = true;
       onSelectNode(node.id, "longpress");
-    }, 500);
+    }, 600);
   };
   const handleTouchEnd = () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -139,7 +205,8 @@ function TreeNode({
     <div data-testid={`tree-node-${node.id}`}>
       <div
         className={cn(
-          "flex items-center gap-2 py-1.5 pr-3 cursor-pointer group transition-all duration-100 rounded-none",
+          // Bigger rows: py-3 on mobile, py-1.5 on desktop
+          "flex items-center gap-2.5 py-3 md:py-1.5 pr-3 cursor-pointer group transition-all duration-100 rounded-none",
           isSelected
             ? cn("text-foreground font-medium", selectedBg)
             : "text-foreground/70 hover:text-foreground hover:bg-muted/60",
@@ -152,7 +219,9 @@ function TreeNode({
           if (didLongPress.current) { didLongPress.current = false; return; }
           if (e.shiftKey) onSelectNode(node.id, "range");
           else if (e.metaKey || e.ctrlKey) onSelectNode(node.id, "multi");
-          else if (selectedIds.size > 0) onSelectNode(node.id, "multi");
+          // On mobile, if in multi-select mode, stay in multi-select;
+          // otherwise always navigate directly to the editor
+          else if (!isMobile && selectedIds.size > 0) onSelectNode(node.id, "multi");
           else onSelectNode(node.id);
         }}
         onTouchStart={handleTouchStart}
@@ -166,11 +235,11 @@ function TreeNode({
       >
         {/* Drag handle / checkbox */}
         {isMultiSelected ? (
-          <div className="h-3.5 w-3.5 flex-shrink-0 rounded-sm bg-indigo-500 flex items-center justify-center">
-            <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <div className="h-5 w-5 md:h-3.5 md:w-3.5 flex-shrink-0 rounded-sm bg-indigo-500 flex items-center justify-center">
+            <svg className="h-3 w-3 md:h-2.5 md:w-2.5 text-white" fill="none" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
         ) : (
-          <GripVertical className="h-3.5 w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
+          <GripVertical className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
         )}
 
         {/* Expand toggle */}
@@ -181,31 +250,46 @@ function TreeNode({
             data-testid={`button-toggle-${node.id}`}
           >
             {isExpanded
-              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+              ? <ChevronDown className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground" />
+              : <ChevronRight className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground" />}
           </button>
         ) : (
-          <span className="w-3.5 flex-shrink-0" />
+          <span className="w-4 md:w-3.5 flex-shrink-0" />
         )}
 
-        {/* Colored icon badge */}
-        <div className={cn("w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors", iconStyle)}>
-          <Icon className="h-3.5 w-3.5" />
+        {/* Cover art thumbnail (if available) or type icon badge */}
+        {hasCover ? (
+          <CoverThumb node={node} />
+        ) : (
+          <div className={cn("w-10 h-10 md:w-6 md:h-6 rounded-lg md:rounded-md flex items-center justify-center flex-shrink-0 transition-colors", iconStyle)}>
+            <Icon className="h-5 w-5 md:h-3.5 md:w-3.5" />
+          </div>
+        )}
+
+        {/* Title + type subtitle */}
+        <div className="flex-1 min-w-0">
+          <span className="truncate block text-sm md:text-sm font-medium">{node.title}</span>
+          {isMobile && (
+            <span className="truncate block text-[11px] text-muted-foreground capitalize">
+              {node.type.replace(/_/g, " ")}
+            </span>
+          )}
         </div>
 
-        {/* Title */}
-        <span className="truncate flex-1 text-sm">{node.title}</span>
+        {/* Publish toggle button */}
+        <PublishDot
+          node={node}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePublish(node);
+          }}
+        />
 
-        {/* Live indicator dot */}
-        {isPublished && (
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" title="Published" />
-        )}
-
-        {/* Add child button */}
+        {/* Add child button (desktop hover only) */}
         {nodeIsFolder && (
           <button
             onClick={(e) => { e.stopPropagation(); onAddNode(node.id); }}
-            className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-black/8"
+            className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-black/8 hidden md:block"
             data-testid={`button-add-child-${node.id}`}
           >
             <Plus className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
@@ -233,6 +317,7 @@ function TreeNode({
               onDrop={onDrop}
               dragOverId={dragOverId}
               dropFolderId={dropFolderId}
+              onTogglePublish={onTogglePublish}
             />
           ))}
         </div>
@@ -268,6 +353,12 @@ export function ContentTree({
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
+  }, []);
+
+  const handleTogglePublish = useCallback(async (node: MenuNodeWithMetadata) => {
+    const endpoint = node.status === "published" ? "unpublish" : "publish";
+    await apiRequest("POST", `/api/nodes/${node.id}/${endpoint}`);
+    queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
   }, []);
 
   const handleDragStart = useCallback((e: React.DragEvent, nodeId: string) => {
@@ -308,11 +399,9 @@ export function ContentTree({
     const crossParent = sourceNode.parentId !== targetNode.parentId;
 
     if (targetIsFolder && crossParent) {
-      // Dropping onto a different folder — show folder highlight
       setDropFolderId(nodeId);
       setDragOverId(null);
     } else if (!crossParent) {
-      // Same parent — show reorder line
       setDragOverId(nodeId);
       setDropFolderId(null);
     } else {
@@ -322,7 +411,6 @@ export function ContentTree({
   }, [nodes, dragNodeId]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    // Only clear if we're truly leaving the row (not entering a child element)
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDropFolderId(null);
       setDragOverId(null);
@@ -334,7 +422,6 @@ export function ContentTree({
     setDragOverId(null);
     setDropFolderId(null);
 
-    // Parse dragged IDs (multi or single)
     let dragIds: string[];
     try {
       dragIds = JSON.parse(e.dataTransfer.getData("application/x-node-ids"));
@@ -350,14 +437,12 @@ export function ContentTree({
     const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === targetId);
 
     if (targetIsFolder) {
-      // Move all dragged items into the target folder
       const targetChildren = nodes
         .filter((n) => n.parentId === targetId)
         .sort((a, b) => a.sortOrder - b.sortOrder);
       let nextSortOrder = targetChildren.length > 0
         ? targetChildren[targetChildren.length - 1].sortOrder + 1
         : 0;
-      // Filter out the target itself and nodes already in target
       const toMove = dragIds.filter((id) => {
         const n = nodes.find((x) => x.id === id);
         return n && id !== targetId && n.parentId !== targetId;
@@ -371,7 +456,6 @@ export function ContentTree({
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
       setExpandedIds((prev) => new Set([...prev, targetId]));
     } else if (dragIds.length === 1) {
-      // Single-item reorder within same parent
       const sourceId = dragIds[0];
       const sourceNode = nodes.find((n) => n.id === sourceId);
       if (!sourceNode || sourceNode.parentId !== targetNode.parentId) return;
@@ -394,7 +478,7 @@ export function ContentTree({
   const rootNodes = nodes.filter((n) => !n.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
-    <div data-testid="content-tree">
+    <div data-testid="content-tree" className="py-1">
       {rootNodes.map((node) => (
         <TreeNode
           key={node.id}
@@ -413,6 +497,7 @@ export function ContentTree({
           onDrop={handleDrop}
           dragOverId={dragOverId}
           dropFolderId={dropFolderId}
+          onTogglePublish={handleTogglePublish}
         />
       ))}
     </div>
