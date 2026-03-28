@@ -531,7 +531,36 @@ export function NodeEditor({
       };
       ext = mimeMap[file.type] || "webm";
     }
-    setAudioUrl(await uploadToSupabase(file, ext));
+    const newUrl = await uploadToSupabase(file, ext);
+    setAudioUrl(newUrl);
+    // Auto-save the node so the user doesn't need to hit Save Changes after recording
+    try {
+      await apiRequest("PATCH", `/api/nodes/${node.id}`, {
+        title,
+        metadata: {
+          artistName: artistName || null,
+          albumName: albumName || null,
+          audioUrl: newUrl,
+          videoUrl: videoUrl || null,
+          linkUrl: linkUrl || null,
+          bodyText: bodyText || null,
+          coverImageUrl: coverMode === "image" ? (coverImageUrl || null) : null,
+          coverImagePosition: coverMode === "image" && coverImageUrl ? coverImagePosition : null,
+          coverImageZoom: coverMode === "image" && coverImageUrl ? String(coverImageZoom) : null,
+          coverEmoji: coverMode === "emoji" ? (coverEmoji || null) : null,
+          coverColor: coverMode === "emoji" ? (coverColor || null) : null,
+          previewImage: previewImage || null,
+          splitScreen: splitScreen ?? null,
+          videoThumbnailUrl: videoThumbnailUrl || null,
+          duration: duration || null,
+          links: links.length > 0 ? links : null,
+          photos: photos.length > 0 ? photos : null,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      setSaveFlash(true);
+      setTimeout(() => setSaveFlash(false), 1500);
+    } catch { /* silent — user can still hit Save manually */ }
   };
 
   const handleVideoUpload = async (file: File) => {
