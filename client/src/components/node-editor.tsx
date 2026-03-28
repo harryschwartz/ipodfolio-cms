@@ -918,28 +918,49 @@ function ImageUploader({
     return [parts[0] ?? 50, parts[1] ?? 50];
   };
 
+  const startDrag = (clientX: number, clientY: number) => {
+    const [px, py] = parsePos(position);
+    dragRef.current = { startX: clientX, startY: clientY, startPos: [px, py] };
+  };
+
+  const moveDrag = (clientX: number, clientY: number) => {
+    if (!dragRef.current) return;
+    const dx = (dragRef.current.startX - clientX) / 2;
+    const dy = (dragRef.current.startY - clientY) / 2;
+    const nx = Math.min(100, Math.max(0, dragRef.current.startPos[0] + dx));
+    const ny = Math.min(100, Math.max(0, dragRef.current.startPos[1] + dy));
+    onPositionChange?.(`${Math.round(nx)}% ${Math.round(ny)}%`);
+  };
+
+  const endDrag = () => { dragRef.current = null; };
+
+  // Mouse events
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    const [px, py] = parsePos(position);
-    dragRef.current = { startX: e.clientX, startY: e.clientY, startPos: [px, py] };
-
-    const onMove = (me: MouseEvent) => {
-      if (!dragRef.current) return;
-      // Each 2px of mouse movement = 1% of position shift (inverted — drag right moves focal point left)
-      const dx = (dragRef.current.startX - me.clientX) / 2;
-      const dy = (dragRef.current.startY - me.clientY) / 2;
-      const nx = Math.min(100, Math.max(0, dragRef.current.startPos[0] + dx));
-      const ny = Math.min(100, Math.max(0, dragRef.current.startPos[1] + dy));
-      onPositionChange?.(`${Math.round(nx)}% ${Math.round(ny)}%`);
-    };
+    startDrag(e.clientX, e.clientY);
+    const onMove = (me: MouseEvent) => moveDrag(me.clientX, me.clientY);
     const onUp = () => {
-      dragRef.current = null;
+      endDrag();
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };
+
+  // Touch events
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    startDrag(t.clientX, t.clientY);
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1 || !dragRef.current) return;
+    e.preventDefault(); // prevent scroll while repositioning
+    const t = e.touches[0];
+    moveDrag(t.clientX, t.clientY);
+  };
+  const handleTouchEnd = () => { endDrag(); };
 
   return (
     <div className="space-y-3">
@@ -949,8 +970,11 @@ function ImageUploader({
           <div className="space-y-1">
             {onPositionChange && <p className="text-xs text-muted-foreground">Drag to reposition</p>}
             <div
-              className={`relative rounded-xl overflow-hidden border border-border bg-muted w-full max-w-xs aspect-square select-none ${onPositionChange ? "cursor-grab active:cursor-grabbing" : ""}`}
+              className={`relative rounded-xl overflow-hidden border border-border bg-muted w-full max-w-xs aspect-square select-none touch-none ${onPositionChange ? "cursor-grab active:cursor-grabbing" : ""}`}
               onMouseDown={onPositionChange ? handleMouseDown : undefined}
+              onTouchStart={onPositionChange ? handleTouchStart : undefined}
+              onTouchMove={onPositionChange ? handleTouchMove : undefined}
+              onTouchEnd={onPositionChange ? handleTouchEnd : undefined}
             >
               <img
                 src={value}
