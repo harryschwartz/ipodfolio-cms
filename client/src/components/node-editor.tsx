@@ -911,6 +911,7 @@ function ImageUploader({
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
   const dragRef = useRef<{ startX: number; startY: number; startPos: [number, number] } | null>(null);
+  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
 
   // Parse "X% Y%" into [x, y] numbers
   const parsePos = (p: string): [number, number] => {
@@ -948,19 +949,42 @@ function ImageUploader({
     window.addEventListener("mouseup", onUp);
   };
 
-  // Touch events
+  // Pinch-to-zoom helpers
+  const getTouchDist = (t1: React.Touch, t2: React.Touch) =>
+    Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+  // Touch events — 1 finger = reposition, 2 fingers = pinch zoom
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    startDrag(t.clientX, t.clientY);
+    if (e.touches.length === 2 && onZoomChange) {
+      // Start pinch
+      e.preventDefault();
+      dragRef.current = null; // cancel any drag
+      pinchRef.current = {
+        startDist: getTouchDist(e.touches[0], e.touches[1]),
+        startZoom: zoom,
+      };
+    } else if (e.touches.length === 1 && !pinchRef.current) {
+      const t = e.touches[0];
+      startDrag(t.clientX, t.clientY);
+    }
   };
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1 || !dragRef.current) return;
-    e.preventDefault(); // prevent scroll while repositioning
-    const t = e.touches[0];
-    moveDrag(t.clientX, t.clientY);
+    if (e.touches.length === 2 && pinchRef.current && onZoomChange) {
+      e.preventDefault();
+      const newDist = getTouchDist(e.touches[0], e.touches[1]);
+      const scale = newDist / pinchRef.current.startDist;
+      const newZoom = Math.min(3, Math.max(1, pinchRef.current.startZoom * scale));
+      onZoomChange(Math.round(newZoom * 20) / 20); // snap to 0.05 increments
+    } else if (e.touches.length === 1 && dragRef.current) {
+      e.preventDefault();
+      const t = e.touches[0];
+      moveDrag(t.clientX, t.clientY);
+    }
   };
-  const handleTouchEnd = () => { endDrag(); };
+  const handleTouchEnd = () => {
+    pinchRef.current = null;
+    endDrag();
+  };
 
   return (
     <div className="space-y-3">
@@ -968,13 +992,13 @@ function ImageUploader({
         <>
           {/* Preview — drag to reposition if supported */}
           <div className="space-y-1">
-            {onPositionChange && <p className="text-xs text-muted-foreground">Drag to reposition</p>}
+            {onPositionChange && <p className="text-xs text-muted-foreground">Drag to reposition{onZoomChange ? " · Pinch to zoom" : ""}</p>}
             <div
               className={`relative rounded-xl overflow-hidden border border-border bg-muted w-full max-w-xs aspect-square select-none touch-none ${onPositionChange ? "cursor-grab active:cursor-grabbing" : ""}`}
               onMouseDown={onPositionChange ? handleMouseDown : undefined}
-              onTouchStart={onPositionChange ? handleTouchStart : undefined}
-              onTouchMove={onPositionChange ? handleTouchMove : undefined}
-              onTouchEnd={onPositionChange ? handleTouchEnd : undefined}
+              onTouchStart={(onPositionChange || onZoomChange) ? handleTouchStart : undefined}
+              onTouchMove={(onPositionChange || onZoomChange) ? handleTouchMove : undefined}
+              onTouchEnd={(onPositionChange || onZoomChange) ? handleTouchEnd : undefined}
             >
               <img
                 src={value}
