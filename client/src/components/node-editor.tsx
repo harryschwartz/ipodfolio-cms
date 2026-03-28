@@ -120,7 +120,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function FieldGroup({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("rounded-xl border border-border bg-white p-4 space-y-4 shadow-sm", className)}>
+    <div className={cn("rounded-xl border border-border bg-white p-4 space-y-4 shadow-sm min-w-0 overflow-hidden", className)}>
       {children}
     </div>
   );
@@ -545,12 +545,12 @@ export function NodeEditor({
   const headerBg = TYPE_HEADER_BG[node.type] || "bg-gradient-to-r from-indigo-50 to-violet-50";
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden w-full max-w-full">
       {/* Colored gradient accent stripe */}
       <div className={cn("h-1.5 w-full bg-gradient-to-r flex-shrink-0", gradient)} />
 
       {/* Header */}
-      <div className={cn("shrink-0 px-6 pt-4 pb-5 border-b border-border", headerBg)}>
+      <div className={cn("shrink-0 px-4 md:px-6 pt-4 pb-5 border-b border-border", headerBg)}>
         {/* Breadcrumb */}
         {parentNode && (
           <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
@@ -608,7 +608,7 @@ export function NodeEditor({
       </div>
 
       <ScrollArea className="flex-1 min-h-0 bg-background">
-        <div className="max-w-2xl mx-auto px-6 py-6 pb-8 space-y-6">
+        <div className="max-w-2xl mx-auto px-4 md:px-6 py-6 pb-8 space-y-6 overflow-x-hidden">
 
           {isReadOnly && (
             <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 flex items-start gap-3">
@@ -934,7 +934,7 @@ export function NodeEditor({
       </ScrollArea>
 
       {/* Action bar */}
-      <div className="shrink-0 border-t border-border bg-background/80 backdrop-blur-sm px-6 py-3 flex items-center justify-between gap-3">
+      <div className="shrink-0 border-t border-border bg-background/80 backdrop-blur-sm px-4 md:px-6 py-3 flex items-center justify-between gap-3">
         <Button
           size="default"
           onClick={() => updateMutation.mutate()}
