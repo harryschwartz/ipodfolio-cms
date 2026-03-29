@@ -45,6 +45,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AudioRecorder } from "@/components/audio-recorder";
+import { AudioBadge } from "@/components/audio-badge";
 import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
@@ -320,6 +321,12 @@ function ChildrenList({
                   <p className="text-sm font-medium truncate">{child.title}</p>
                   {child.metadata?.artistName && <p className="text-xs text-muted-foreground truncate">{(child.metadata as any).artistName}</p>}
                 </div>
+                {(child.metadata as any)?.audioUrl && (
+                  <AudioBadge
+                    audioUrl={(child.metadata as any).audioUrl}
+                    duration={(child.metadata as any)?.duration}
+                  />
+                )}
                 <Badge variant="secondary" className="text-[10px] flex-shrink-0">{TYPE_LABELS[child.type] || child.type}</Badge>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
               </div>

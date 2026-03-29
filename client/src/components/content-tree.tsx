@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { AudioBadge } from "@/components/audio-badge";
 
 const TYPE_ICONS: Record<string, any> = {
   folder: Folder,
@@ -275,6 +276,14 @@ function TreeNode({
             </span>
           )}
         </div>
+
+        {/* Audio recording indicator */}
+        {(node.metadata as any)?.audioUrl && (
+          <AudioBadge
+            audioUrl={(node.metadata as any).audioUrl}
+            duration={(node.metadata as any)?.duration}
+          />
+        )}
 
         {/* Publish toggle button */}
         <PublishDot
