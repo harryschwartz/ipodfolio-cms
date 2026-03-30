@@ -42,6 +42,7 @@ import {
   Gamepad2,
   Layers,
   Scissors,
+  Pencil,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -378,6 +379,7 @@ export function NodeEditor({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
   const [showTrimmer, setShowTrimmer] = useState(false);
+  const [editingCover, setEditingCover] = useState(false);
   const dragCounter = useRef(0);
 
   // Prevent browser from opening dragged files as a new tab,
@@ -447,6 +449,7 @@ export function NodeEditor({
     setLinks((node.metadata?.links as any) || []);
     setPhotos((node.metadata?.photos as any) || []);
     setShowTrimmer(false);
+    setEditingCover(false);
   }
 
   const updateMutation = useMutation({
@@ -706,6 +709,8 @@ export function NodeEditor({
                         onEmojiChange={setCoverEmoji}
                         color={coverColor}
                         onColorChange={setCoverColor}
+                        editing={editingCover}
+                        onEditChange={setEditingCover}
                       />
                     </FieldGroup>
                   </div>
@@ -804,6 +809,8 @@ export function NodeEditor({
                         onEmojiChange={setCoverEmoji}
                         color={coverColor}
                         onColorChange={setCoverColor}
+                        editing={editingCover}
+                        onEditChange={setEditingCover}
                       />
                     </FieldGroup>
                   </div>
@@ -837,6 +844,8 @@ export function NodeEditor({
                         onEmojiChange={setCoverEmoji}
                         color={coverColor}
                         onColorChange={setCoverColor}
+                        editing={editingCover}
+                        onEditChange={setEditingCover}
                       />
                     </FieldGroup>
                   </div>
@@ -1067,6 +1076,7 @@ function CoverArtPicker({
   imageZoom, onImageZoomChange,
   emoji, onEmojiChange,
   color, onColorChange,
+  editing, onEditChange,
 }: {
   mode: "image" | "emoji"; onModeChange: (m: "image" | "emoji") => void;
   imageUrl: string; onImageChange: (u: string) => void; onImageUpload: (f: File) => Promise<void>;
@@ -1074,9 +1084,54 @@ function CoverArtPicker({
   imageZoom: number; onImageZoomChange: (z: number) => void;
   emoji: string; onEmojiChange: (e: string) => void;
   color: string; onColorChange: (c: string) => void;
+  editing: boolean; onEditChange: (editing: boolean) => void;
 }) {
+  // Has any cover art been set?
+  const hasCover = mode === "image" ? !!imageUrl : !!emoji;
+
+  // Static preview mode: show cover art with Edit button
+  if (!editing && hasCover) {
+    return (
+      <div className="space-y-2">
+        {mode === "image" ? (
+          <div className="relative rounded-xl overflow-hidden border border-border bg-muted w-full max-w-xs aspect-square">
+            <img
+              src={imageUrl}
+              alt=""
+              draggable={false}
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{
+                objectFit: "cover",
+                objectPosition: imagePosition,
+                transform: imageZoom !== 1 ? `scale(${imageZoom})` : undefined,
+                transformOrigin: imagePosition,
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            className="w-24 h-24 rounded-2xl flex items-center justify-center text-4xl shadow-sm border border-border/50"
+            style={{ backgroundColor: color }}
+          >
+            {emoji}
+          </div>
+        )}
+        <Button variant="outline" size="sm" onClick={() => onEditChange(true)} className="gap-1.5">
+          <Pencil className="h-3.5 w-3.5" /> Edit Cover
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
+      {/* Done button when editing existing cover */}
+      {editing && hasCover && (
+        <Button variant="outline" size="sm" onClick={() => onEditChange(false)} className="gap-1.5">
+          <Check className="h-3.5 w-3.5" /> Done
+        </Button>
+      )}
+
       {/* Tab toggle */}
       <div className="flex rounded-lg border border-border overflow-hidden text-xs font-medium w-fit">
         <button
