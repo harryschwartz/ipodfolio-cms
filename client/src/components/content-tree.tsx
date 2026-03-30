@@ -239,6 +239,8 @@ function TreeNode({
           <div className="h-5 w-5 md:h-3.5 md:w-3.5 flex-shrink-0 rounded-sm bg-indigo-500 flex items-center justify-center">
             <svg className="h-3 w-3 md:h-2.5 md:w-2.5 text-white" fill="none" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
+        ) : selectedIds.size > 0 ? (
+          <div className="h-5 w-5 md:h-3.5 md:w-3.5 flex-shrink-0 rounded-sm border-2 border-muted-foreground/25 hover:border-indigo-400 transition-colors" />
         ) : (
           <GripVertical className="h-4 w-4 md:h-3.5 md:w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0 transition-opacity" />
         )}
