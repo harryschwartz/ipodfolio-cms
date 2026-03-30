@@ -41,11 +41,13 @@ import {
   Settings,
   Gamepad2,
   Layers,
+  Scissors,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AudioRecorder } from "@/components/audio-recorder";
 import { AudioBadge } from "@/components/audio-badge";
+import { AudioTrimmer } from "@/components/audio-trimmer";
 import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
@@ -375,6 +377,7 @@ export function NodeEditor({
   );
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
+  const [showTrimmer, setShowTrimmer] = useState(false);
   const dragCounter = useRef(0);
 
   // Prevent browser from opening dragged files as a new tab,
@@ -443,6 +446,7 @@ export function NodeEditor({
     setDuration(node.metadata?.duration || 0);
     setLinks((node.metadata?.links as any) || []);
     setPhotos((node.metadata?.photos as any) || []);
+    setShowTrimmer(false);
   }
 
   const updateMutation = useMutation({
@@ -710,10 +714,29 @@ export function NodeEditor({
                     <FieldGroup>
                       {audioUrl ? (
                         <div className="space-y-3">
-                          <audio controls src={audioUrl} className="w-full" />
-                          <Button variant="outline" size="sm" onClick={() => setAudioUrl("")} data-testid="button-remove-audio" className="gap-2">
-                            <X className="h-3.5 w-3.5" />Remove Audio
-                          </Button>
+                          {showTrimmer ? (
+                            <AudioTrimmer
+                              audioUrl={audioUrl}
+                              onTrimComplete={async (blob, trimDuration) => {
+                                setShowTrimmer(false);
+                                setDuration(Math.round(trimDuration));
+                                await handleAudioUpload(new File([blob], "trimmed.wav", { type: "audio/wav" }));
+                              }}
+                              onCancel={() => setShowTrimmer(false)}
+                            />
+                          ) : (
+                            <>
+                              <audio controls src={audioUrl} className="w-full" />
+                              <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" onClick={() => setShowTrimmer(true)} className="gap-2">
+                                  <Scissors className="h-3.5 w-3.5" />Trim
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => setAudioUrl("")} data-testid="button-remove-audio" className="gap-2 text-destructive hover:text-destructive">
+                                  <X className="h-3.5 w-3.5" />Remove
+                                </Button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-4">
