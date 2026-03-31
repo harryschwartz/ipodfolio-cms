@@ -47,9 +47,15 @@ export function AudioTrimmer({
       try {
         const ctx = new AudioContext();
         audioCtxRef.current = ctx;
-        const res = await fetch(audioUrl);
+        // Resume context immediately (may be suspended on iOS)
+        if (ctx.state === "suspended") {
+          await ctx.resume().catch(() => {});
+        }
+        const res = await fetch(audioUrl, { mode: "cors" });
         const arrayBuf = await res.arrayBuffer();
-        const decoded = await ctx.decodeAudioData(arrayBuf);
+        // decodeAudioData must receive a non-detached buffer, so copy it
+        const copy = arrayBuf.slice(0);
+        const decoded = await ctx.decodeAudioData(copy);
         if (cancelled) return;
         bufferRef.current = decoded;
         setDuration(decoded.duration);
@@ -182,6 +188,22 @@ export function AudioTrimmer({
     dragging.current = null;
   };
 
+  // Use refs for current handle positions so playback/trim closures always see latest values
+  const startPctRef = useRef(startPct);
+  const endPctRef = useRef(endPct);
+  const durationRef = useRef(duration);
+  useEffect(() => { startPctRef.current = startPct; }, [startPct]);
+  useEffect(() => { endPctRef.current = endPct; }, [endPct]);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+
+  /** Resume AudioContext (must be called from a user gesture on iOS) */
+  const ensureContextResumed = async () => {
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state === "suspended") {
+      await ctx.resume();
+    }
+  };
+
   // --- Playback ---
   const stopPlayback = () => {
     if (sourceRef.current) {
@@ -192,23 +214,29 @@ export function AudioTrimmer({
     setPlaying(false);
   };
 
-  const playSelection = () => {
+  const playSelection = async () => {
     if (!bufferRef.current || !audioCtxRef.current) return;
     stopPlayback();
 
     const ctx = audioCtxRef.current;
+    // Resume on user gesture — critical for iOS
+    await ensureContextResumed();
+
     const source = ctx.createBufferSource();
     source.buffer = bufferRef.current;
     source.connect(ctx.destination);
 
-    const start = startPct * duration;
-    const end = endPct * duration;
-    const selDuration = end - start;
+    // Read from refs to get latest handle positions
+    const s = startPctRef.current;
+    const e = endPctRef.current;
+    const dur = durationRef.current;
+    const startSec = s * dur;
+    const selDuration = (e - s) * dur;
 
-    source.start(0, start, selDuration);
+    source.start(0, startSec, selDuration);
     sourceRef.current = source;
     setPlaying(true);
-    playStartRef.current = { wallTime: ctx.currentTime, audioTime: start };
+    playStartRef.current = { wallTime: ctx.currentTime, audioTime: startSec };
 
     source.onended = () => {
       setPlaying(false);
@@ -233,37 +261,60 @@ export function AudioTrimmer({
 
   // --- Trim & export ---
   const handleTrim = async () => {
-    if (!bufferRef.current || !audioCtxRef.current) return;
+    if (!bufferRef.current) return;
     setTrimming(true);
     stopPlayback();
 
     try {
       const buf = bufferRef.current;
       const sr = buf.sampleRate;
-      const startSample = Math.floor(startPct * buf.length);
-      const endSample = Math.floor(endPct * buf.length);
+      const s = startPctRef.current;
+      const e = endPctRef.current;
+      const startSample = Math.floor(s * buf.length);
+      const endSample = Math.floor(e * buf.length);
       const len = endSample - startSample;
 
-      // Create offline context and copy selected region
-      const offCtx = new OfflineAudioContext(buf.numberOfChannels, len, sr);
-      const newBuf = offCtx.createBuffer(buf.numberOfChannels, len, sr);
-      for (let ch = 0; ch < buf.numberOfChannels; ch++) {
-        const src = buf.getChannelData(ch);
-        const dst = newBuf.getChannelData(ch);
-        for (let i = 0; i < len; i++) {
-          dst[i] = src[startSample + i];
+      if (len <= 0) throw new Error("Selection is empty");
+
+      // Encode selected region directly to WAV — no OfflineAudioContext needed
+      // This avoids iOS restrictions on OfflineAudioContext
+      const numCh = buf.numberOfChannels;
+      const wavSr = sr;
+      const bytesPerSample = 2;
+      const blockAlign = numCh * bytesPerSample;
+      const dataSize = len * blockAlign;
+      const headerSize = 44;
+      const arrayBuf = new ArrayBuffer(headerSize + dataSize);
+      const view = new DataView(arrayBuf);
+
+      // RIFF header
+      writeStr(view, 0, "RIFF");
+      view.setUint32(4, 36 + dataSize, true);
+      writeStr(view, 8, "WAVE");
+      writeStr(view, 12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numCh, true);
+      view.setUint32(24, wavSr, true);
+      view.setUint32(28, wavSr * blockAlign, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, 16, true);
+      writeStr(view, 36, "data");
+      view.setUint32(40, dataSize, true);
+
+      // Copy selected sample data
+      const channels: Float32Array[] = [];
+      for (let ch = 0; ch < numCh; ch++) channels.push(buf.getChannelData(ch));
+      let offset = 44;
+      for (let i = 0; i < len; i++) {
+        for (let ch = 0; ch < numCh; ch++) {
+          const sample = Math.max(-1, Math.min(1, channels[ch][startSample + i]));
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+          offset += 2;
         }
       }
 
-      const source = offCtx.createBufferSource();
-      source.buffer = newBuf;
-      source.connect(offCtx.destination);
-      source.start();
-
-      const rendered = await offCtx.startRendering();
-
-      // Encode as WAV (universally supported)
-      const wavBlob = audioBufferToWav(rendered);
+      const wavBlob = new Blob([arrayBuf], { type: "audio/wav" });
       const trimmedDuration = len / sr;
 
       onTrimComplete(wavBlob, trimmedDuration);
@@ -273,6 +324,11 @@ export function AudioTrimmer({
       setTrimming(false);
     }
   };
+
+  /** Write ASCII string into DataView */
+  function writeStr(view: DataView, off: number, str: string) {
+    for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i));
+  }
 
   const resetHandles = () => {
     stopPlayback();
@@ -402,54 +458,4 @@ export function AudioTrimmer({
       )}
     </div>
   );
-}
-
-/** Encode an AudioBuffer as a 16-bit PCM WAV Blob */
-function audioBufferToWav(buffer: AudioBuffer): Blob {
-  const numCh = buffer.numberOfChannels;
-  const sr = buffer.sampleRate;
-  const len = buffer.length;
-  const bytesPerSample = 2;
-  const blockAlign = numCh * bytesPerSample;
-  const dataSize = len * blockAlign;
-  const headerSize = 44;
-  const arrayBuf = new ArrayBuffer(headerSize + dataSize);
-  const view = new DataView(arrayBuf);
-
-  // RIFF header
-  writeString(view, 0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(view, 8, "WAVE");
-  // fmt chunk
-  writeString(view, 12, "fmt ");
-  view.setUint32(16, 16, true); // chunk size
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, numCh, true);
-  view.setUint32(24, sr, true);
-  view.setUint32(28, sr * blockAlign, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true); // bits per sample
-  // data chunk
-  writeString(view, 36, "data");
-  view.setUint32(40, dataSize, true);
-
-  // Interleave channel data
-  let offset = 44;
-  const channels: Float32Array[] = [];
-  for (let ch = 0; ch < numCh; ch++) channels.push(buffer.getChannelData(ch));
-  for (let i = 0; i < len; i++) {
-    for (let ch = 0; ch < numCh; ch++) {
-      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-      offset += 2;
-    }
-  }
-
-  return new Blob([arrayBuf], { type: "audio/wav" });
-}
-
-function writeString(view: DataView, offset: number, str: string) {
-  for (let i = 0; i < str.length; i++) {
-    view.setUint8(offset + i, str.charCodeAt(i));
-  }
 }
