@@ -382,6 +382,72 @@ export function NodeEditor({
   const [editingCover, setEditingCover] = useState(false);
   const dragCounter = useRef(0);
 
+  /* ── Photo reorder state ── */
+  const [photoDragIdx, setPhotoDragIdx] = useState<number | null>(null);
+  const [photoOverIdx, setPhotoOverIdx] = useState<number | null>(null);
+  const photoTouchRef = useRef<{ idx: number; startY: number; moved: boolean } | null>(null);
+  const photoListRef = useRef<HTMLDivElement>(null);
+
+  const reorderPhotos = (from: number, to: number) => {
+    if (from === to) return;
+    const next = [...photos];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    // Re-index sortOrder
+    next.forEach((p, i) => (p.sortOrder = i));
+    setPhotos(next);
+    return next;
+  };
+
+  const handlePhotoDragStart = (e: React.DragEvent, idx: number) => {
+    e.dataTransfer.effectAllowed = "move";
+    setPhotoDragIdx(idx);
+  };
+  const handlePhotoDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    setPhotoOverIdx(idx);
+  };
+  const handlePhotoDrop = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (photoDragIdx !== null) reorderPhotos(photoDragIdx, idx);
+    setPhotoDragIdx(null);
+    setPhotoOverIdx(null);
+  };
+  const handlePhotoDragEnd = () => { setPhotoDragIdx(null); setPhotoOverIdx(null); };
+
+  const handlePhotoGripTouchStart = (idx: number, e: React.TouchEvent) => {
+    e.stopPropagation();
+    const t = e.touches[0];
+    photoTouchRef.current = { idx, startY: t.clientY, moved: false };
+    setPhotoDragIdx(idx);
+  };
+  const handlePhotoTouchMove = (e: React.TouchEvent) => {
+    if (!photoTouchRef.current || !photoListRef.current) return;
+    const t = e.touches[0];
+    const dy = Math.abs(t.clientY - photoTouchRef.current.startY);
+    if (dy > 5) photoTouchRef.current.moved = true;
+    if (!photoTouchRef.current.moved) return;
+    e.preventDefault();
+    const rows = photoListRef.current.querySelectorAll<HTMLElement>("[data-photo-idx]");
+    for (const row of rows) {
+      const rect = row.getBoundingClientRect();
+      if (t.clientY >= rect.top && t.clientY <= rect.bottom) {
+        const targetIdx = parseInt(row.dataset.photoIdx!, 10);
+        if (targetIdx !== photoTouchRef.current.idx) {
+          reorderPhotos(photoTouchRef.current.idx, targetIdx);
+          photoTouchRef.current.idx = targetIdx;
+          setPhotoOverIdx(targetIdx);
+        }
+        break;
+      }
+    }
+  };
+  const handlePhotoTouchEnd = () => {
+    photoTouchRef.current = null;
+    setPhotoDragIdx(null);
+    setPhotoOverIdx(null);
+  };
+
   // Prevent browser from opening dragged files as a new tab,
   // and handle drops anywhere on the page when editing a photo album
   const handleFileDrop = async (files: File[]) => {
@@ -452,29 +518,46 @@ export function NodeEditor({
     setEditingCover(false);
   }
 
+  /* ── Build metadata payload (with optional overrides) ── */
+  const buildMetadata = (overrides: Record<string, any> = {}) => ({
+    artistName: artistName || null,
+    albumName: albumName || null,
+    audioUrl: audioUrl || null,
+    videoUrl: videoUrl || null,
+    linkUrl: linkUrl || null,
+    bodyText: bodyText || null,
+    coverImageUrl: coverMode === "image" ? (coverImageUrl || null) : null,
+    coverImagePosition: coverMode === "image" && coverImageUrl ? coverImagePosition : null,
+    coverImageZoom: coverMode === "image" && coverImageUrl ? String(coverImageZoom) : null,
+    coverEmoji: coverMode === "emoji" ? (coverEmoji || null) : null,
+    coverColor: coverMode === "emoji" ? (coverColor || null) : null,
+    previewImage: previewImage || null,
+    splitScreen: splitScreen ?? null,
+    videoThumbnailUrl: videoThumbnailUrl || null,
+    duration: duration || null,
+    links: links.length > 0 ? links : null,
+    photos: photos.length > 0 ? photos : null,
+    ...overrides,
+  });
+
+  /* ── Auto-save helper (PATCH without full-page save) ── */
+  const autoSave = async (metadataOverrides: Record<string, any> = {}) => {
+    try {
+      await apiRequest("PATCH", `/api/nodes/${node.id}`, {
+        title,
+        metadata: buildMetadata(metadataOverrides),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      setSaveFlash(true);
+      setTimeout(() => setSaveFlash(false), 1500);
+    } catch { /* silent — user can still hit Save manually */ }
+  };
+
   const updateMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("PATCH", `/api/nodes/${node.id}`, {
         title,
-        metadata: {
-          artistName: artistName || null,
-          albumName: albumName || null,
-          audioUrl: audioUrl || null,
-          videoUrl: videoUrl || null,
-          linkUrl: linkUrl || null,
-          bodyText: bodyText || null,
-          coverImageUrl: coverMode === "image" ? (coverImageUrl || null) : null,
-          coverImagePosition: coverMode === "image" && coverImageUrl ? coverImagePosition : null,
-          coverImageZoom: coverMode === "image" && coverImageUrl ? String(coverImageZoom) : null,
-          coverEmoji: coverMode === "emoji" ? (coverEmoji || null) : null,
-          coverColor: coverMode === "emoji" ? (coverColor || null) : null,
-          previewImage: previewImage || null,
-          splitScreen: splitScreen ?? null,
-          videoThumbnailUrl: videoThumbnailUrl || null,
-          duration: duration || null,
-          links: links.length > 0 ? links : null,
-          photos: photos.length > 0 ? photos : null,
-        },
+        metadata: buildMetadata(),
       });
     },
     onSuccess: () => {
@@ -544,7 +627,6 @@ export function NodeEditor({
     if (file instanceof File) {
       ext = file.name.split(".").pop() || "webm";
     } else {
-      // Derive ext from blob MIME type
       const mimeMap: Record<string, string> = {
         "audio/mp4": "m4a", "audio/aac": "aac", "audio/ogg": "ogg",
         "audio/ogg;codecs=opus": "ogg", "audio/wav": "wav",
@@ -554,34 +636,24 @@ export function NodeEditor({
     }
     const newUrl = await uploadToSupabase(file, ext);
     setAudioUrl(newUrl);
-    // Auto-save the node so the user doesn't need to hit Save Changes after recording
-    try {
-      await apiRequest("PATCH", `/api/nodes/${node.id}`, {
-        title,
-        metadata: {
-          artistName: artistName || null,
-          albumName: albumName || null,
-          audioUrl: newUrl,
-          videoUrl: videoUrl || null,
-          linkUrl: linkUrl || null,
-          bodyText: bodyText || null,
-          coverImageUrl: coverMode === "image" ? (coverImageUrl || null) : null,
-          coverImagePosition: coverMode === "image" && coverImageUrl ? coverImagePosition : null,
-          coverImageZoom: coverMode === "image" && coverImageUrl ? String(coverImageZoom) : null,
-          coverEmoji: coverMode === "emoji" ? (coverEmoji || null) : null,
-          coverColor: coverMode === "emoji" ? (coverColor || null) : null,
-          previewImage: previewImage || null,
-          splitScreen: splitScreen ?? null,
-          videoThumbnailUrl: videoThumbnailUrl || null,
-          duration: duration || null,
-          links: links.length > 0 ? links : null,
-          photos: photos.length > 0 ? photos : null,
-        },
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
-      setSaveFlash(true);
-      setTimeout(() => setSaveFlash(false), 1500);
-    } catch { /* silent — user can still hit Save manually */ }
+    await autoSave({ audioUrl: newUrl });
+  };
+
+  /* ── Cover image upload: upload then auto-enter edit mode ── */
+  const handleCoverImageUpload = async (file: File) => {
+    const { blob, ext } = await convertHeicToJpeg(file);
+    const url = await uploadToSupabase(blob, ext);
+    setCoverImageUrl(url);
+    setEditingCover(true);
+  };
+
+  /* ── Cover edit toggle: entering edit = just toggle; exiting ("Done") = auto-save ── */
+  const handleCoverEditChange = (editing: boolean) => {
+    setEditingCover(editing);
+    if (!editing) {
+      // "Done" pressed — auto-save cover changes
+      autoSave();
+    }
   };
 
   const handleVideoUpload = async (file: File) => {
@@ -700,7 +772,7 @@ export function NodeEditor({
                         onModeChange={setCoverMode}
                         imageUrl={coverImageUrl}
                         onImageChange={setCoverImageUrl}
-                        onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        onImageUpload={handleCoverImageUpload}
                         imagePosition={coverImagePosition}
                         onImagePositionChange={setCoverImagePosition}
                         imageZoom={coverImageZoom}
@@ -710,7 +782,7 @@ export function NodeEditor({
                         color={coverColor}
                         onColorChange={setCoverColor}
                         editing={editingCover}
-                        onEditChange={setEditingCover}
+                        onEditChange={handleCoverEditChange}
                       />
                     </FieldGroup>
                   </div>
@@ -800,7 +872,7 @@ export function NodeEditor({
                         onModeChange={setCoverMode}
                         imageUrl={coverImageUrl}
                         onImageChange={setCoverImageUrl}
-                        onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        onImageUpload={handleCoverImageUpload}
                         imagePosition={coverImagePosition}
                         onImagePositionChange={setCoverImagePosition}
                         imageZoom={coverImageZoom}
@@ -810,7 +882,7 @@ export function NodeEditor({
                         color={coverColor}
                         onColorChange={setCoverColor}
                         editing={editingCover}
-                        onEditChange={setEditingCover}
+                        onEditChange={handleCoverEditChange}
                       />
                     </FieldGroup>
                   </div>
@@ -835,7 +907,7 @@ export function NodeEditor({
                         onModeChange={setCoverMode}
                         imageUrl={coverImageUrl}
                         onImageChange={setCoverImageUrl}
-                        onImageUpload={(f) => handleImageUpload(f, setCoverImageUrl)}
+                        onImageUpload={handleCoverImageUpload}
                         imagePosition={coverImagePosition}
                         onImagePositionChange={setCoverImagePosition}
                         imageZoom={coverImageZoom}
@@ -845,7 +917,7 @@ export function NodeEditor({
                         color={coverColor}
                         onColorChange={setCoverColor}
                         editing={editingCover}
-                        onEditChange={setEditingCover}
+                        onEditChange={handleCoverEditChange}
                       />
                     </FieldGroup>
                   </div>
@@ -898,20 +970,42 @@ export function NodeEditor({
                 <>
                   <div>
                     <SectionHeader>Photos</SectionHeader>
-                    <FieldGroup className="space-y-3">
-                      {photos.map((photo, i) => (
-                        <div key={i} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-background">
-                          <div className="w-14 h-14 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
-                            {photo.url
-                              ? <img src={photo.url} alt={photo.caption || ""} className="w-full h-full object-cover" />
-                              : <div className="w-full h-full flex items-center justify-center"><Upload className="h-5 w-5 text-muted-foreground" /></div>
-                            }
+                    <FieldGroup className="p-0 overflow-hidden space-y-0">
+                      <div ref={photoListRef} onTouchMove={handlePhotoTouchMove} onTouchEnd={handlePhotoTouchEnd}>
+                        {photos.map((photo, i) => (
+                          <div
+                            key={`photo-${i}`}
+                            data-photo-idx={i}
+                            draggable
+                            onDragStart={(e) => handlePhotoDragStart(e, i)}
+                            onDragOver={(e) => handlePhotoDragOver(e, i)}
+                            onDrop={(e) => handlePhotoDrop(e, i)}
+                            onDragEnd={handlePhotoDragEnd}
+                            className={cn(
+                              "flex items-center gap-3 px-2 py-2 border-b border-border last:border-0 transition-colors group",
+                              photoDragIdx === i && "opacity-40 scale-[1.02] shadow-md z-10 relative bg-white rounded-lg",
+                              photoOverIdx === i && photoDragIdx !== i && "bg-pink-50",
+                            )}
+                          >
+                            <div
+                              className="flex items-center justify-center w-8 h-10 -ml-1 flex-shrink-0 cursor-grab active:cursor-grabbing"
+                              style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties}
+                              onTouchStart={(e) => handlePhotoGripTouchStart(i, e)}
+                            >
+                              <GripVertical className="h-4 w-4 text-muted-foreground/30" />
+                            </div>
+                            <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
+                              {photo.url
+                                ? <img src={photo.url} alt={photo.caption || ""} className="w-full h-full object-cover" />
+                                : <div className="w-full h-full flex items-center justify-center"><Upload className="h-5 w-5 text-muted-foreground" /></div>
+                              }
+                            </div>
+                            <Input placeholder="Caption (optional)" value={photo.caption || ""} onChange={(e) => { const u = [...photos]; u[i] = { ...u[i], caption: e.target.value }; setPhotos(u); }} className="flex-1 text-sm h-8" />
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
                           </div>
-                          <Input placeholder="Caption (optional)" value={photo.caption || ""} onChange={(e) => { const u = [...photos]; u[i] = { ...u[i], caption: e.target.value }; setPhotos(u); }} className="flex-1 text-sm h-8" />
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
-                        </div>
-                      ))}
-                      <label className="cursor-pointer block">
+                        ))}
+                      </div>
+                      <label className="cursor-pointer block p-3">
                         <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
                           const files = e.target.files;
                           if (!files) return;
