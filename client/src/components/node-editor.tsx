@@ -658,7 +658,13 @@ export function NodeEditor({
 
   const handleVideoUpload = async (file: File) => {
     const ext = file.name.split(".").pop() || "mp4";
-    setVideoUrl(await uploadToSupabase(file, ext));
+    try {
+      const newUrl = await uploadToSupabase(file, ext);
+      setVideoUrl(newUrl);
+      await autoSave({ videoUrl: newUrl });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    }
   };
 
   const isReadOnly = ["settings", "game", "cover_flow_home", "cover_flow_music"].includes(node.type);
