@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { MenuNodeWithMetadata } from "@shared/schema";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 type MobileView = "tree" | "editor";
 type ViewMode = "list" | "column";
@@ -24,6 +25,24 @@ function getStoredViewMode(): ViewMode {
     if (v === "list" || v === "column") return v;
   } catch {}
   return "list";
+}
+
+const LIST_PANEL_KEY = "cms-list-panel-size";
+const COLUMN_PANEL_KEY = "cms-column-panel-size";
+
+function getStoredPanelSize(key: string, fallback: number): number {
+  try {
+    const v = localStorage.getItem(key);
+    if (v) {
+      const n = parseFloat(v);
+      if (isFinite(n) && n > 0 && n < 100) return n;
+    }
+  } catch {}
+  return fallback;
+}
+
+function storePanelSize(key: string, size: number) {
+  try { localStorage.setItem(key, String(size)); } catch {}
 }
 
 function IpodIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
@@ -559,63 +578,78 @@ export default function Dashboard() {
   // ─── DESKTOP — LIST VIEW ───
   return (
     <div className="flex h-screen overflow-hidden bg-background" data-testid="dashboard">
-      {/* Sidebar */}
-      <aside className="w-[288px] min-w-[288px] border-r border-border bg-sidebar flex flex-col shadow-lg">
-        <SidebarHeader
-          onPreview={() => window.open("https://ipodfolio.vercel.app?preview=true", "_blank")}
-          viewMode={viewMode}
-          onViewModeChange={handleViewModeChange}
-        />
+      <ResizablePanelGroup
+        direction="horizontal"
+        onLayout={(sizes) => { if (sizes[0]) storePanelSize(LIST_PANEL_KEY, sizes[0]); }}
+      >
+        {/* Sidebar */}
+        <ResizablePanel
+          defaultSize={getStoredPanelSize(LIST_PANEL_KEY, 22)}
+          minSize={15}
+          maxSize={45}
+        >
+          <aside className="h-full bg-sidebar flex flex-col shadow-lg">
+            <SidebarHeader
+              onPreview={() => window.open("https://ipodfolio.vercel.app?preview=true", "_blank")}
+              viewMode={viewMode}
+              onViewModeChange={handleViewModeChange}
+            />
 
-        {/* Add + Search */}
-        <div className="px-3 pt-3 pb-1 shrink-0 space-y-2">
-          <Button
-            data-testid="button-add-root-node"
-            onClick={() => handleAddNode(null)}
-            className="w-full gap-2 h-9 text-sm font-semibold bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white border-0 shadow-sm hover:shadow-md transition-all"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Collection
-          </Button>
-          <SearchBar value={searchQuery} onChange={setSearchQuery} />
-        </div>
+            {/* Add + Search */}
+            <div className="px-3 pt-3 pb-1 shrink-0 space-y-2">
+              <Button
+                data-testid="button-add-root-node"
+                onClick={() => handleAddNode(null)}
+                className="w-full gap-2 h-9 text-sm font-semibold bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 text-white border-0 shadow-sm hover:shadow-md transition-all"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New Collection
+              </Button>
+              <SearchBar value={searchQuery} onChange={setSearchQuery} />
+            </div>
 
-        {/* Content Tree */}
-        <ScrollArea className="flex-1">
-          {isLoading ? (
-            <div className="px-3 py-3 space-y-1.5">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-9 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : filteredNodes.length === 0 && searchQuery.trim() ? (
-            <div className="px-4 py-12 text-center">
-              <Search className="h-8 w-8 text-muted-foreground/20 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No results for "{searchQuery}"</p>
-            </div>
-          ) : (
-            <div className="py-2">
-              <ContentTree
-                nodes={filteredNodes}
-                selectedNodeId={selectedNodeId}
-                selectedIds={selectedIds}
-                onSelectNode={handleSelectNode}
-                onAddNode={handleAddNode}
-                searchQuery={searchQuery}
-              />
-            </div>
-          )}
-        </ScrollArea>
-      </aside>
+            {/* Content Tree */}
+            <ScrollArea className="flex-1">
+              {isLoading ? (
+                <div className="px-3 py-3 space-y-1.5">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <Skeleton key={i} className="h-9 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : filteredNodes.length === 0 && searchQuery.trim() ? (
+                <div className="px-4 py-12 text-center">
+                  <Search className="h-8 w-8 text-muted-foreground/20 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No results for "{searchQuery}"</p>
+                </div>
+              ) : (
+                <div className="py-2">
+                  <ContentTree
+                    nodes={filteredNodes}
+                    selectedNodeId={selectedNodeId}
+                    selectedIds={selectedIds}
+                    onSelectNode={handleSelectNode}
+                    onAddNode={handleAddNode}
+                    searchQuery={searchQuery}
+                  />
+                </div>
+              )}
+            </ScrollArea>
+          </aside>
+        </ResizablePanel>
 
-      {/* Main Area */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-background">
-        {selectedNode ? (
-          <NodeEditor node={selectedNode} allNodes={nodes || []} onSelectNode={handleSelectNode} onAddNode={handleAddNode} />
-        ) : (
-          <EmptyState onAdd={() => handleAddNode(null)} />
-        )}
-      </main>
+        <ResizableHandle className="bg-border hover:bg-indigo-400 active:bg-indigo-500 transition-colors data-[resize-handle-active]:bg-indigo-500 w-[3px] after:w-2" />
+
+        {/* Main Area */}
+        <ResizablePanel defaultSize={getStoredPanelSize(LIST_PANEL_KEY, 22) > 0 ? 100 - getStoredPanelSize(LIST_PANEL_KEY, 22) : 78} minSize={35}>
+          <main className="h-full flex flex-col overflow-hidden bg-background">
+            {selectedNode ? (
+              <NodeEditor node={selectedNode} allNodes={nodes || []} onSelectNode={handleSelectNode} onAddNode={handleAddNode} />
+            ) : (
+              <EmptyState onAdd={() => handleAddNode(null)} />
+            )}
+          </main>
+        </ResizablePanel>
+      </ResizablePanelGroup>
 
       <AddNodeDialog
         open={addDialogOpen}

@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { NodeEditor } from "@/components/node-editor";
+import { AudioBadge } from "@/components/audio-badge";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 const TYPE_ICONS: Record<string, any> = {
   folder: Folder,
@@ -142,6 +144,13 @@ function ColumnItem({
 
       <span className="truncate flex-1 text-sm font-medium">{node.title}</span>
 
+      {(node.metadata as any)?.audioUrl && (
+        <AudioBadge
+          audioUrl={(node.metadata as any).audioUrl}
+          duration={(node.metadata as any)?.duration}
+        />
+      )}
+
       {isPublished && !isSelected && !isMultiSelected && (
         <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" title="Published" />
       )}
@@ -253,6 +262,23 @@ function BrowserColumn({
       </div>
     </div>
   );
+}
+
+const COLUMN_PANEL_KEY = "cms-column-panel-size";
+
+function getStoredColumnPanelSize(fallback: number): number {
+  try {
+    const v = localStorage.getItem(COLUMN_PANEL_KEY);
+    if (v) {
+      const n = parseFloat(v);
+      if (isFinite(n) && n > 0 && n < 100) return n;
+    }
+  } catch {}
+  return fallback;
+}
+
+function storeColumnPanelSize(size: number) {
+  try { localStorage.setItem(COLUMN_PANEL_KEY, String(size)); } catch {}
 }
 
 // ── Main ColumnBrowser component ─────────────────────────────────────────────
@@ -494,54 +520,67 @@ export function ColumnBrowser({
 
   const dragState = { dragOverId, dropFolderId };
 
+  const editorDefaultSize = getStoredColumnPanelSize(35);
+  const columnsDefaultSize = 100 - editorDefaultSize;
+
   return (
-    <div className="flex h-full overflow-hidden">
+    <ResizablePanelGroup
+      direction="horizontal"
+      className="h-full"
+      onLayout={(sizes) => { if (sizes[1]) storeColumnPanelSize(sizes[1]); }}
+    >
       {/* Scrollable columns area */}
-      <div
-        ref={scrollRef}
-        className="flex flex-1 overflow-x-auto overflow-y-hidden"
-        style={{ minWidth: 0 }}
-      >
-        {columnParents.map((parentId) => (
-          <BrowserColumn
-            key={parentId ?? "__root__"}
-            parentId={parentId}
-            nodes={nodes}
-            columnPath={columnPath}
-            selectedNodeId={selectedNodeId}
-            selectedIds={selectedIds}
-            onClickNode={handleClickNode}
-            onLongPressNode={handleLongPressNode}
-            onAddNode={onAddNode}
-            dragState={dragState}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onDropOnBackground={handleDropOnBackground}
-          />
-        ))}
-        {/* Filler so the last column isn't flush against the editor */}
-        <div className="w-4 shrink-0" />
-      </div>
+      <ResizablePanel defaultSize={columnsDefaultSize} minSize={30}>
+        <div
+          ref={scrollRef}
+          className="flex h-full overflow-x-auto overflow-y-hidden"
+          style={{ minWidth: 0 }}
+        >
+          {columnParents.map((parentId) => (
+            <BrowserColumn
+              key={parentId ?? "__root__"}
+              parentId={parentId}
+              nodes={nodes}
+              columnPath={columnPath}
+              selectedNodeId={selectedNodeId}
+              selectedIds={selectedIds}
+              onClickNode={handleClickNode}
+              onLongPressNode={handleLongPressNode}
+              onAddNode={onAddNode}
+              dragState={dragState}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onDropOnBackground={handleDropOnBackground}
+            />
+          ))}
+          {/* Filler so the last column isn't flush against the editor */}
+          <div className="w-4 shrink-0" />
+        </div>
+      </ResizablePanel>
+
+      <ResizableHandle className="bg-border hover:bg-indigo-400 active:bg-indigo-500 transition-colors data-[resize-handle-active]:bg-indigo-500 w-[3px] after:w-2" />
 
       {/* Editor pane */}
-      <div className="w-[420px] min-w-[320px] shrink-0 border-l border-border flex flex-col overflow-hidden">
-        {selectedNode ? (
-          <NodeEditor node={selectedNode} allNodes={nodes} onSelectNode={onSelectNode} onAddNode={onAddNode} />
-        ) : (
-          <div className="flex-1 flex items-center justify-center p-8 text-center">
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
-                <Layers className="h-6 w-6 text-muted-foreground" />
+      <ResizablePanel defaultSize={editorDefaultSize} minSize={20} maxSize={55}>
+        <div className="h-full flex flex-col overflow-hidden">
+          {selectedNode ? (
+            <NodeEditor node={selectedNode} allNodes={nodes} onSelectNode={onSelectNode} onAddNode={onAddNode} />
+          ) : (
+            <div className="flex-1 flex items-center justify-center p-8 text-center">
+              <div>
+                <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
+                  <Layers className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Select an item to edit it
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Select an item to edit it
-              </p>
             </div>
-          </div>
-        )}
-      </div>
-    </div>
+          )}
+        </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
