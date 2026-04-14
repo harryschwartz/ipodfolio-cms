@@ -73,6 +73,37 @@ const TYPE_SELECTED_BG: Record<string, string> = {
 
 const FOLDER_TYPES = new Set(["folder", "album", "playlist", "photo_album"]);
 
+// Display labels (singular → plural)
+const TYPE_LABELS: Record<string, [string, string]> = {
+  folder: ["folder", "folders"],
+  song: ["song", "songs"],
+  album: ["album", "albums"],
+  playlist: ["playlist", "playlists"],
+  photo_album: ["photo album", "photo albums"],
+  video: ["video", "videos"],
+  link: ["link", "links"],
+  text: ["text", "texts"],
+  settings: ["settings", "settings"],
+  game: ["game", "games"],
+  cover_flow_home: ["cover flow", "cover flows"],
+  cover_flow_music: ["cover flow", "cover flows"],
+};
+
+function getChildrenSummary(nodeId: string, nodes: MenuNodeWithMetadata[]): string {
+  const children = nodes.filter((n) => n.parentId === nodeId);
+  if (children.length === 0) return "";
+  const counts = new Map<string, number>();
+  for (const child of children) {
+    counts.set(child.type, (counts.get(child.type) || 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([type, count]) => {
+      const [singular, plural] = TYPE_LABELS[type] || [type.replace(/_/g, " "), type.replace(/_/g, " ") + "s"];
+      return `${count} ${count === 1 ? singular : plural}`;
+    })
+    .join(", ");
+}
+
 function isFolder(node: MenuNodeWithMetadata, nodes: MenuNodeWithMetadata[]): boolean {
   return FOLDER_TYPES.has(node.type) || nodes.some((n) => n.parentId === node.id);
 }
@@ -269,7 +300,7 @@ function TreeNode({
           </div>
         )}
 
-        {/* Title + type subtitle */}
+        {/* Title + type subtitle + children summary */}
         <div className="flex-1 min-w-0">
           <span className="truncate block text-sm md:text-sm font-medium">{node.title}</span>
           {isMobile && (
@@ -277,6 +308,14 @@ function TreeNode({
               {node.type.replace(/_/g, " ")}
             </span>
           )}
+          {nodeIsFolder && (() => {
+            const summary = getChildrenSummary(node.id, nodes);
+            return summary ? (
+              <span className="truncate block text-[11px] text-muted-foreground/70">
+                {summary}
+              </span>
+            ) : null;
+          })()}
         </div>
 
         {/* Audio recording indicator */}
