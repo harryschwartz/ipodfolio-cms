@@ -330,6 +330,28 @@ function ChildrenList({
                     duration={(child.metadata as any)?.duration}
                   />
                 )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const endpoint = child.status === "published" ? "unpublish" : "publish";
+                    apiRequest("POST", `/api/nodes/${child.id}/${endpoint}`).then(() => {
+                      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+                    });
+                  }}
+                  className={cn(
+                    "flex items-center gap-1 px-1.5 py-1 rounded-full text-[10px] font-semibold transition-all flex-shrink-0",
+                    child.status === "published"
+                      ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                      : "text-muted-foreground bg-muted/50 hover:bg-muted"
+                  )}
+                  title={child.status === "published" ? "Published — tap to unpublish" : "Draft — tap to publish"}
+                >
+                  {child.status === "published" ? (
+                    <Globe className="h-3 w-3" />
+                  ) : (
+                    <EyeOff className="h-3 w-3" />
+                  )}
+                </button>
                 <Badge variant="secondary" className="text-[10px] flex-shrink-0">{TYPE_LABELS[child.type] || child.type}</Badge>
                 <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
               </div>
