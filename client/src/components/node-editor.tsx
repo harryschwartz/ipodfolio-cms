@@ -400,6 +400,10 @@ export function NodeEditor({
   );
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [showTrimmer, setShowTrimmer] = useState(false);
   const [editingCover, setEditingCover] = useState(false);
   const dragCounter = useRef(0);
@@ -474,10 +478,25 @@ export function NodeEditor({
   // and handle drops anywhere on the page when editing a photo album
   const handleFileDrop = async (files: File[]) => {
     const imageFiles = files.filter(f => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
-    for (const file of imageFiles) {
-      const { blob, ext } = await convertHeicToJpeg(file);
-      const url = await uploadToSupabase(blob, ext);
-      setPhotos((prev) => [...prev, { url, caption: "", sortOrder: prev.length }]);
+    if (!imageFiles.length) return;
+    setUploadingPhotos(true);
+    setUploadProgress(0);
+    try {
+      for (let i = 0; i < imageFiles.length; i++) {
+        const { blob, ext } = await convertHeicToJpeg(imageFiles[i]);
+        const url = await uploadToSupabase(blob, ext, (pct) => {
+          const base = Math.round((i / imageFiles.length) * 100);
+          const slice = Math.round(pct / imageFiles.length);
+          setUploadProgress(base + slice);
+        });
+        setPhotos((prev) => [...prev, { url, caption: "", sortOrder: prev.length }]);
+      }
+      toast({ title: "Photos uploaded", description: `${imageFiles.length} photo${imageFiles.length > 1 ? "s" : ""} added.` });
+    } catch (err: any) {
+      toast({ title: "Photo upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingPhotos(false);
+      setUploadProgress(0);
     }
   };
 
@@ -612,24 +631,39 @@ export function NodeEditor({
     },
   });
 
-  const uploadToSupabase = async (file: File | Blob, ext: string): Promise<string> => {
+  const uploadToSupabase = async (
+    file: File | Blob,
+    ext: string,
+    onProgress?: (pct: number) => void,
+  ): Promise<string> => {
     const SUPABASE_URL = "https://xtjjavrixvnwoulgebqp.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0amphdnJpeHZud291bGdlYnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjgxNjIsImV4cCI6MjA4OTU0NDE2Mn0.aSL3bi4__sS1OaeF2_MkTMrOGfHmnHBKxhKP8zd0qAQ";
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    // Use the blob's actual MIME type, but strip codec params for the Content-Type header
     const rawType = file.type || (file instanceof File ? file.type : `application/octet-stream`);
     const contentType = rawType.split(";")[0] || `application/octet-stream`;
-    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/cms-assets/${path}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": contentType,
-        "x-upsert": "true",
-      },
-      body: file,
+    const url = `${SUPABASE_URL}/storage/v1/object/cms-assets/${path}`;
+
+    return new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.setRequestHeader("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
+      xhr.setRequestHeader("Content-Type", contentType);
+      xhr.setRequestHeader("x-upsert", "true");
+      if (onProgress) {
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        });
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(`${SUPABASE_URL}/storage/v1/object/public/cms-assets/${path}`);
+        } else {
+          reject(new Error(`Upload failed: ${xhr.responseText}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Upload failed: network error"));
+      xhr.send(file);
     });
-    if (!res.ok) throw new Error(`Upload failed: ${await res.text()}`);
-    return `${SUPABASE_URL}/storage/v1/object/public/cms-assets/${path}`;
   };
 
   const convertHeicToJpeg = async (file: File): Promise<{ blob: Blob; ext: string }> => {
@@ -656,9 +690,19 @@ export function NodeEditor({
       };
       ext = mimeMap[file.type] || "webm";
     }
-    const newUrl = await uploadToSupabase(file, ext);
-    setAudioUrl(newUrl);
-    await autoSave({ audioUrl: newUrl });
+    setUploadingAudio(true);
+    setUploadProgress(0);
+    try {
+      const newUrl = await uploadToSupabase(file, ext, setUploadProgress);
+      setAudioUrl(newUrl);
+      await autoSave({ audioUrl: newUrl });
+      toast({ title: "Audio uploaded", description: "Audio file saved successfully." });
+    } catch (err: any) {
+      toast({ title: "Audio upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingAudio(false);
+      setUploadProgress(0);
+    }
   };
 
   /* ── Cover image upload: upload then auto-enter edit mode ── */
@@ -668,6 +712,8 @@ export function NodeEditor({
     setCoverImageUrl(url);
     setEditingCover(true);
   };
+
+  const isUploading = uploadingVideo || uploadingAudio || uploadingPhotos;
 
   /* ── Cover edit toggle: entering edit = just toggle; exiting ("Done") = auto-save ── */
   const handleCoverEditChange = (editing: boolean) => {
@@ -680,9 +726,19 @@ export function NodeEditor({
 
   const handleVideoUpload = async (file: File) => {
     const ext = file.name.split(".").pop() || "mp4";
-    const newUrl = await uploadToSupabase(file, ext);
-    setVideoUrl(newUrl);
-    await autoSave({ videoUrl: newUrl });
+    setUploadingVideo(true);
+    setUploadProgress(0);
+    try {
+      const newUrl = await uploadToSupabase(file, ext, setUploadProgress);
+      setVideoUrl(newUrl);
+      await autoSave({ videoUrl: newUrl });
+      toast({ title: "Video uploaded", description: "Video file saved successfully." });
+    } catch (err: any) {
+      toast({ title: "Video upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingVideo(false);
+      setUploadProgress(0);
+    }
   };
 
   const isReadOnly = ["settings", "game", "cover_flow_home", "cover_flow_music"].includes(node.type);
@@ -841,16 +897,27 @@ export function NodeEditor({
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          <label className="cursor-pointer block">
-                            <input type="file" accept="audio/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAudioUpload(f); }} />
-                            <div className="w-full rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 flex flex-col items-center gap-2 py-8 hover:border-emerald-300 hover:bg-emerald-50 transition-all group">
-                              <div className="w-10 h-10 rounded-full bg-emerald-100 group-hover:bg-emerald-200 transition-colors flex items-center justify-center">
-                                <Upload className="h-5 w-5 text-emerald-600" />
+                          {uploadingAudio ? (
+                            <div className="w-full rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 flex flex-col items-center gap-3 py-8">
+                              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center animate-pulse">
+                                <Music className="h-5 w-5 text-emerald-600" />
                               </div>
-                              <p className="text-sm font-medium text-emerald-700">Upload audio file</p>
-                              <p className="text-xs text-emerald-500">MP3, AAC, WAV, FLAC</p>
+                              <div className="w-48">
+                                <UploadProgressBar progress={uploadProgress} label="Uploading audio…" />
+                              </div>
                             </div>
-                          </label>
+                          ) : (
+                            <label className="cursor-pointer block">
+                              <input type="file" accept="audio/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAudioUpload(f); }} />
+                              <div className="w-full rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50/50 flex flex-col items-center gap-2 py-8 hover:border-emerald-300 hover:bg-emerald-50 transition-all group">
+                                <div className="w-10 h-10 rounded-full bg-emerald-100 group-hover:bg-emerald-200 transition-colors flex items-center justify-center">
+                                  <Upload className="h-5 w-5 text-emerald-600" />
+                                </div>
+                                <p className="text-sm font-medium text-emerald-700">Upload audio file</p>
+                                <p className="text-xs text-emerald-500">MP3, AAC, WAV, FLAC</p>
+                              </div>
+                            </label>
+                          )}
                           <div className="relative flex items-center gap-3">
                             <div className="flex-1 border-t border-border" />
                             <span className="text-xs text-muted-foreground font-medium">or record in browser</span>
@@ -1029,17 +1096,27 @@ export function NodeEditor({
                           </div>
                         ))}
                       </div>
-                      <label className="cursor-pointer block p-3">
-                        <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
-                          const files = e.target.files;
-                          if (!files) return;
-                          await handleFileDrop(Array.from(files));
-                        }} />
-                        <div className={`border-2 border-dashed rounded-lg px-4 py-6 text-center text-sm transition-colors ${isDraggingOver ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-border text-muted-foreground hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
-                          <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
-                          <span>{isDraggingOver ? "Drop to upload" : <>Drop photos here or <span className="text-indigo-600 font-medium">browse</span></>}</span>
+                      {uploadingPhotos ? (
+                        <div className="p-3">
+                          <div className="border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-lg px-4 py-6">
+                            <div className="max-w-xs mx-auto">
+                              <UploadProgressBar progress={uploadProgress} label="Uploading photos…" />
+                            </div>
+                          </div>
                         </div>
-                      </label>
+                      ) : (
+                        <label className="cursor-pointer block p-3">
+                          <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files) return;
+                            await handleFileDrop(Array.from(files));
+                          }} />
+                          <div className={`border-2 border-dashed rounded-lg px-4 py-6 text-center text-sm transition-colors ${isDraggingOver ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-border text-muted-foreground hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
+                            <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                            <span>{isDraggingOver ? "Drop to upload" : <>Drop photos here or <span className="text-indigo-600 font-medium">browse</span></>}</span>
+                          </div>
+                        </label>
+                      )}
                     </FieldGroup>
                   </div>
                   <ChildrenList
@@ -1066,10 +1143,14 @@ export function NodeEditor({
                       <Field label="Video URL">
                         <Input data-testid="input-video-url" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://..." />
                       </Field>
-                      <label className="cursor-pointer block">
-                        <input type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); }} />
-                        <Button variant="outline" size="sm" asChild className="gap-2"><span data-testid="button-upload-video"><Upload className="h-3.5 w-3.5" />Upload Video File</span></Button>
-                      </label>
+                      {uploadingVideo ? (
+                        <UploadProgressBar progress={uploadProgress} label="Uploading video…" />
+                      ) : (
+                        <label className="cursor-pointer block">
+                          <input type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); }} />
+                          <Button variant="outline" size="sm" asChild className="gap-2"><span data-testid="button-upload-video"><Upload className="h-3.5 w-3.5" />Upload Video File</span></Button>
+                        </label>
+                      )}
                       <p className="text-xs text-muted-foreground/60">MP4, MOV, WebM, M4V</p>
                       <Field label="Duration" hint="In seconds">
                         <Input type="number" value={duration} onChange={(e) => setDuration(parseInt(e.target.value) || 0)} className="w-32" />
@@ -1513,6 +1594,23 @@ function ImageUploader({
           </div>
         </label>
       )}
+    </div>
+  );
+}
+
+function UploadProgressBar({ progress, label }: { progress: number; label?: string }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground font-medium">{label || "Uploading…"}</span>
+        <span className="text-muted-foreground tabular-nums">{progress}%</span>
+      </div>
+      <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-300 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
     </div>
   );
 }
