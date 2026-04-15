@@ -741,7 +741,7 @@ export function NodeEditor({
     }
   };
 
-  const isReadOnly = ["settings", "cover_flow_home", "cover_flow_music"].includes(node.type);
+  const isReadOnly = ["cover_flow_home", "cover_flow_music"].includes(node.type);
   const parentNode = node.parentId ? allNodes.find((n) => n.id === node.parentId) : null;
   const gradient = TYPE_GRADIENT[node.type] || "from-indigo-500 to-violet-500";
   const headerBg = TYPE_HEADER_BG[node.type] || "bg-gradient-to-r from-indigo-50 to-violet-50";
@@ -1047,6 +1047,41 @@ export function NodeEditor({
                       />
                     </FieldGroup>
                   </div>
+                </>
+              )}
+
+              {/* ── SETTINGS ── */}
+              {node.type === "settings" && (
+                <>
+                  <div>
+                    <SectionHeader>Cover Art</SectionHeader>
+                    <FieldGroup>
+                      <CoverArtPicker
+                        mode={coverMode}
+                        onModeChange={setCoverMode}
+                        imageUrl={coverImageUrl}
+                        onImageChange={setCoverImageUrl}
+                        onImageUpload={handleCoverImageUpload}
+                        imagePosition={coverImagePosition}
+                        onImagePositionChange={setCoverImagePosition}
+                        imageZoom={coverImageZoom}
+                        onImageZoomChange={setCoverImageZoom}
+                        emoji={coverEmoji}
+                        onEmojiChange={setCoverEmoji}
+                        color={coverColor}
+                        onColorChange={setCoverColor}
+                        editing={editingCover}
+                        onEditChange={handleCoverEditChange}
+                      />
+                    </FieldGroup>
+                  </div>
+                  <ChildrenList
+                    parentId={node.id}
+                    children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                    label="Children"
+                    onSelectNode={onSelectNode}
+                    onAddNode={onAddNode}
+                  />
                 </>
               )}
 
