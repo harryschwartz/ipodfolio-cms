@@ -617,8 +617,8 @@ export function NodeEditor({
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0amphdnJpeHZud291bGdlYnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjgxNjIsImV4cCI6MjA4OTU0NDE2Mn0.aSL3bi4__sS1OaeF2_MkTMrOGfHmnHBKxhKP8zd0qAQ";
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     // Use the blob's actual MIME type, but strip codec params for the Content-Type header
-    const rawType = file.type || (file instanceof File ? file.type : `audio/${ext}`);
-    const contentType = rawType.split(";")[0] || `audio/${ext}`;
+    const rawType = file.type || (file instanceof File ? file.type : `application/octet-stream`);
+    const contentType = rawType.split(";")[0] || `application/octet-stream`;
     const res = await fetch(`${SUPABASE_URL}/storage/v1/object/cms-assets/${path}`, {
       method: "POST",
       headers: {
@@ -680,7 +680,9 @@ export function NodeEditor({
 
   const handleVideoUpload = async (file: File) => {
     const ext = file.name.split(".").pop() || "mp4";
-    setVideoUrl(await uploadToSupabase(file, ext));
+    const newUrl = await uploadToSupabase(file, ext);
+    setVideoUrl(newUrl);
+    await autoSave({ videoUrl: newUrl });
   };
 
   const isReadOnly = ["settings", "game", "cover_flow_home", "cover_flow_music"].includes(node.type);
@@ -1056,13 +1058,19 @@ export function NodeEditor({
                   <div>
                     <SectionHeader>Video</SectionHeader>
                     <FieldGroup>
+                      {videoUrl && (
+                        <div className="rounded-lg overflow-hidden border border-border bg-black">
+                          <video controls src={videoUrl} className="w-full max-h-64" />
+                        </div>
+                      )}
                       <Field label="Video URL">
                         <Input data-testid="input-video-url" value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://..." />
                       </Field>
                       <label className="cursor-pointer block">
-                        <input type="file" accept="video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); }} />
+                        <input type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v,video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); }} />
                         <Button variant="outline" size="sm" asChild className="gap-2"><span data-testid="button-upload-video"><Upload className="h-3.5 w-3.5" />Upload Video File</span></Button>
                       </label>
+                      <p className="text-xs text-muted-foreground/60">MP4, MOV, WebM, M4V</p>
                       <Field label="Duration" hint="In seconds">
                         <Input type="number" value={duration} onChange={(e) => setDuration(parseInt(e.target.value) || 0)} className="w-32" />
                       </Field>
