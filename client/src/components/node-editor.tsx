@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import * as tus from "tus-js-client";
 import heic2any from "heic2any";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -631,6 +632,9 @@ export function NodeEditor({
     },
   });
 
+  const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB bucket limit
+  const STANDARD_UPLOAD_LIMIT = 50 * 1024 * 1024; // 50MB - Supabase standard upload limit
+
   const uploadToSupabase = async (
     file: File | Blob,
     ext: string,
@@ -638,14 +642,63 @@ export function NodeEditor({
   ): Promise<string> => {
     const SUPABASE_URL = "https://xtjjavrixvnwoulgebqp.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0amphdnJpeHZud291bGdlYnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjgxNjIsImV4cCI6MjA4OTU0NDE2Mn0.aSL3bi4__sS1OaeF2_MkTMrOGfHmnHBKxhKP8zd0qAQ";
+    const BUCKET = "cms-assets";
     const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const rawType = file.type || (file instanceof File ? file.type : `application/octet-stream`);
     const contentType = rawType.split(";")[0] || `application/octet-stream`;
-    const url = `${SUPABASE_URL}/storage/v1/object/cms-assets/${path}`;
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
 
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(`File is too large. Maximum size is 500MB (your file is ${Math.round(file.size / 1024 / 1024)}MB).`);
+    }
+
+    // Use TUS resumable upload for files > 50MB, standard upload otherwise
+    if (file.size > STANDARD_UPLOAD_LIMIT) {
+      return new Promise<string>((resolve, reject) => {
+        const upload = new tus.Upload(file, {
+          endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+          retryDelays: [0, 1000, 3000, 5000],
+          chunkSize: 6 * 1024 * 1024, // 6MB chunks
+          headers: {
+            authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "x-upsert": "true",
+          },
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          metadata: {
+            bucketName: BUCKET,
+            objectName: path,
+            contentType,
+            cacheControl: "3600",
+          },
+          onError(err) {
+            const msg = err.message || "";
+            if (msg.includes("413") || msg.toLowerCase().includes("too large") || msg.toLowerCase().includes("payload")) {
+              reject(new Error("File is too large. Maximum size is 500MB."));
+            } else {
+              reject(new Error(`Upload failed: ${msg}`));
+            }
+          },
+          onProgress(bytesUploaded, bytesTotal) {
+            if (onProgress) {
+              onProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+            }
+          },
+          onSuccess() {
+            resolve(publicUrl);
+          },
+        });
+        upload.findPreviousUploads().then((prev) => {
+          if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+          upload.start();
+        });
+      });
+    }
+
+    // Standard upload for files <= 50MB
     return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", url);
+      xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`);
       xhr.setRequestHeader("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
       xhr.setRequestHeader("Content-Type", contentType);
       xhr.setRequestHeader("x-upsert", "true");
@@ -656,7 +709,9 @@ export function NodeEditor({
       }
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(`${SUPABASE_URL}/storage/v1/object/public/cms-assets/${path}`);
+          resolve(publicUrl);
+        } else if (xhr.status === 413) {
+          reject(new Error("File is too large. Maximum size is 500MB."));
         } else {
           reject(new Error(`Upload failed: ${xhr.responseText}`));
         }
