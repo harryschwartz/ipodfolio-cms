@@ -34,6 +34,7 @@ import {
   Plus,
   X,
   Music,
+  Search,
   ChevronRight,
   Globe,
   EyeOff,
@@ -62,6 +63,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AudioRecorder } from "@/components/audio-recorder";
 import { AudioBadge } from "@/components/audio-badge";
 import { AudioTrimmer } from "@/components/audio-trimmer";
+import { ITunesSearchDialog } from "@/components/itunes-search-dialog";
 import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
@@ -185,6 +187,7 @@ function ChildrenList({
   const [items, setItems] = useState(children);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
+  const [itunesOpen, setItunesOpen] = useState(false);
   const touchRef = useRef<{ idx: number; startY: number; startTime: number; moved: boolean } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -297,10 +300,21 @@ function ChildrenList({
     <div>
       <div className="flex items-center justify-between mb-2">
         <SectionHeader>{label}</SectionHeader>
-        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-1" onClick={() => onAddNode(parentId)}>
-          <Plus className="h-3 w-3" />Add
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setItunesOpen(true)}>
+            <Search className="h-3 w-3" />iTunes
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-1" onClick={() => onAddNode(parentId)}>
+            <Plus className="h-3 w-3" />Add
+          </Button>
+        </div>
       </div>
+      <ITunesSearchDialog
+        open={itunesOpen}
+        onOpenChange={setItunesOpen}
+        parentId={parentId}
+        existingChildCount={items.length}
+      />
       <FieldGroup className="p-0 overflow-hidden space-y-0">
         <div ref={listRef} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
           {items.length === 0 ? (

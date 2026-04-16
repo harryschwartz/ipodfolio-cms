@@ -267,6 +267,41 @@ export async function registerRoutes(
     res.json({ url: dataUrl });
   });
 
+  // ─── ITUNES PROXY ───
+  // Search iTunes catalog (avoids CORS)
+  app.get("/api/itunes/search", async (req, res) => {
+    const term = req.query.term as string;
+    if (!term) {
+      return res.status(400).json({ message: "Missing 'term' parameter" });
+    }
+    const entity = (req.query.entity as string) || "song";
+    const limit = (req.query.limit as string) || "25";
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=${encodeURIComponent(entity)}&limit=${encodeURIComponent(limit)}`;
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ message: `iTunes API error: ${err.message}` });
+    }
+  });
+
+  // Lookup album tracks via iTunes
+  app.get("/api/itunes/lookup", async (req, res) => {
+    const id = req.query.id as string;
+    if (!id) {
+      return res.status(400).json({ message: "Missing 'id' parameter" });
+    }
+    const url = `https://itunes.apple.com/lookup?id=${encodeURIComponent(id)}&entity=song`;
+    try {
+      const response = await fetch(url);
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ message: `iTunes API error: ${err.message}` });
+    }
+  });
+
   // Upload video
   app.post("/api/upload/video", upload.single("file"), async (req, res) => {
     if (!req.file) {

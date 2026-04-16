@@ -13,12 +13,14 @@ import {
   Gamepad2,
   Layers,
   Plus,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { NodeEditor } from "@/components/node-editor";
 import { AudioBadge } from "@/components/audio-badge";
+import { ITunesSearchDialog } from "@/components/itunes-search-dialog";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 const TYPE_ICONS: Record<string, any> = {
@@ -247,6 +249,8 @@ function BrowserColumn({
     .filter((n) => n.parentId === parentId)
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
+  const [itunesOpen, setItunesOpen] = useState(false);
+
   const handleBackgroundDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -270,14 +274,33 @@ function BrowserColumn({
             ? (nodes.find((n) => n.id === parentId)?.title ?? "Items")
             : "Library"}
         </span>
-        <button
-          onClick={() => onAddNode(parentId)}
-          className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          title="Add item"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center gap-0.5">
+          {parentId && (
+            <button
+              onClick={() => setItunesOpen(true)}
+              className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Add from iTunes"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => onAddNode(parentId)}
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            title="Add item"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
+      {parentId && (
+        <ITunesSearchDialog
+          open={itunesOpen}
+          onOpenChange={setItunesOpen}
+          parentId={parentId}
+          existingChildCount={items.length}
+        />
+      )}
 
       {/* Items list */}
       <div className="flex-1 overflow-y-auto py-1">
