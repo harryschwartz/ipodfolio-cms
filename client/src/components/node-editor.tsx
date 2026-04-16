@@ -507,7 +507,7 @@ export function NodeEditor({
   };
 
   useEffect(() => {
-    if (node.type !== "photo_album" && node.type !== "game" && node.type !== "settings") return;
+    if (node.type !== "photo_album" && node.type !== "folder" && node.type !== "settings") return;
     const prevent = (e: DragEvent) => e.preventDefault();
     const onDragEnter = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes("Files")) return;
@@ -1204,63 +1204,25 @@ export function NodeEditor({
               {node.type === "game" && (
                 <>
                   <div>
-                    <SectionHeader>Photos</SectionHeader>
-                    <FieldGroup className="p-0 overflow-hidden space-y-0">
-                      <div ref={photoListRef} onTouchMove={handlePhotoTouchMove} onTouchEnd={handlePhotoTouchEnd}>
-                        {photos.map((photo, i) => (
-                          <div
-                            key={`photo-${i}`}
-                            data-photo-idx={i}
-                            draggable
-                            onDragStart={(e) => handlePhotoDragStart(e, i)}
-                            onDragOver={(e) => handlePhotoDragOver(e, i)}
-                            onDrop={(e) => handlePhotoDrop(e, i)}
-                            onDragEnd={handlePhotoDragEnd}
-                            className={cn(
-                              "flex items-center gap-3 px-2 py-2 border-b border-border last:border-0 transition-colors group",
-                              photoDragIdx === i && "opacity-40 scale-[1.02] shadow-md z-10 relative bg-white rounded-lg",
-                              photoOverIdx === i && photoDragIdx !== i && "bg-pink-50",
-                            )}
-                          >
-                            <div
-                              className="flex items-center justify-center w-8 h-10 -ml-1 flex-shrink-0 cursor-grab active:cursor-grabbing"
-                              style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties}
-                              onTouchStart={(e) => handlePhotoGripTouchStart(i, e)}
-                            >
-                              <GripVertical className="h-4 w-4 text-muted-foreground/30" />
-                            </div>
-                            <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
-                              {photo.url
-                                ? <img src={photo.url} alt={photo.caption || ""} className="w-full h-full object-cover" />
-                                : <div className="w-full h-full flex items-center justify-center"><Upload className="h-5 w-5 text-muted-foreground" /></div>
-                              }
-                            </div>
-                            <Input placeholder="Caption (optional)" value={photo.caption || ""} onChange={(e) => { const u = [...photos]; u[i] = { ...u[i], caption: e.target.value }; setPhotos(u); }} className="flex-1 text-sm h-8" />
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
-                          </div>
-                        ))}
-                      </div>
-                      {uploadingPhotos ? (
-                        <div className="p-3">
-                          <div className="border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-lg px-4 py-6">
-                            <div className="max-w-xs mx-auto">
-                              <UploadProgressBar progress={uploadProgress} label="Uploading photos…" />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <label className="cursor-pointer block p-3">
-                          <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
-                            const files = e.target.files;
-                            if (!files) return;
-                            await handleFileDrop(Array.from(files));
-                          }} />
-                          <div className={`border-2 border-dashed rounded-lg px-4 py-6 text-center text-sm transition-colors ${isDraggingOver ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-border text-muted-foreground hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
-                            <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
-                            <span>{isDraggingOver ? "Drop to upload" : <>Drop photos here or <span className="text-indigo-600 font-medium">browse</span></>}</span>
-                          </div>
-                        </label>
-                      )}
+                    <SectionHeader>Cover Art</SectionHeader>
+                    <FieldGroup>
+                      <CoverArtPicker
+                        mode={coverMode}
+                        onModeChange={setCoverMode}
+                        imageUrl={coverImageUrl}
+                        onImageChange={setCoverImageUrl}
+                        onImageUpload={handleCoverImageUpload}
+                        imagePosition={coverImagePosition}
+                        onImagePositionChange={setCoverImagePosition}
+                        imageZoom={coverImageZoom}
+                        onImageZoomChange={setCoverImageZoom}
+                        emoji={coverEmoji}
+                        onEmojiChange={setCoverEmoji}
+                        color={coverColor}
+                        onColorChange={setCoverColor}
+                        editing={editingCover}
+                        onEditChange={handleCoverEditChange}
+                      />
                     </FieldGroup>
                   </div>
                 </>
@@ -1362,6 +1324,66 @@ export function NodeEditor({
                         </div>
                       </FieldGroup>
                     </div>
+                  </div>
+                  <div>
+                    <SectionHeader>Photos</SectionHeader>
+                    <FieldGroup className="p-0 overflow-hidden space-y-0">
+                      <div ref={photoListRef} onTouchMove={handlePhotoTouchMove} onTouchEnd={handlePhotoTouchEnd}>
+                        {photos.map((photo, i) => (
+                          <div
+                            key={`photo-${i}`}
+                            data-photo-idx={i}
+                            draggable
+                            onDragStart={(e) => handlePhotoDragStart(e, i)}
+                            onDragOver={(e) => handlePhotoDragOver(e, i)}
+                            onDrop={(e) => handlePhotoDrop(e, i)}
+                            onDragEnd={handlePhotoDragEnd}
+                            className={cn(
+                              "flex items-center gap-3 px-2 py-2 border-b border-border last:border-0 transition-colors group",
+                              photoDragIdx === i && "opacity-40 scale-[1.02] shadow-md z-10 relative bg-white rounded-lg",
+                              photoOverIdx === i && photoDragIdx !== i && "bg-pink-50",
+                            )}
+                          >
+                            <div
+                              className="flex items-center justify-center w-8 h-10 -ml-1 flex-shrink-0 cursor-grab active:cursor-grabbing"
+                              style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties}
+                              onTouchStart={(e) => handlePhotoGripTouchStart(i, e)}
+                            >
+                              <GripVertical className="h-4 w-4 text-muted-foreground/30" />
+                            </div>
+                            <div className="w-12 h-12 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
+                              {photo.url
+                                ? <img src={photo.url} alt={photo.caption || ""} className="w-full h-full object-cover" />
+                                : <div className="w-full h-full flex items-center justify-center"><Upload className="h-5 w-5 text-muted-foreground" /></div>
+                              }
+                            </div>
+                            <Input placeholder="Caption (optional)" value={photo.caption || ""} onChange={(e) => { const u = [...photos]; u[i] = { ...u[i], caption: e.target.value }; setPhotos(u); }} className="flex-1 text-sm h-8" />
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0" onClick={() => setPhotos(photos.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
+                          </div>
+                        ))}
+                      </div>
+                      {uploadingPhotos ? (
+                        <div className="p-3">
+                          <div className="border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-lg px-4 py-6">
+                            <div className="max-w-xs mx-auto">
+                              <UploadProgressBar progress={uploadProgress} label="Uploading photos…" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer block p-3">
+                          <input type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files) return;
+                            await handleFileDrop(Array.from(files));
+                          }} />
+                          <div className={`border-2 border-dashed rounded-lg px-4 py-6 text-center text-sm transition-colors ${isDraggingOver ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-border text-muted-foreground hover:border-indigo-400 hover:bg-indigo-50/50"}`}>
+                            <Upload className="h-5 w-5 mx-auto mb-2 opacity-40" />
+                            <span>{isDraggingOver ? "Drop to upload" : <>Drop photos here or <span className="text-indigo-600 font-medium">browse</span></>}</span>
+                          </div>
+                        </label>
+                      )}
+                    </FieldGroup>
                   </div>
                   <ChildrenList
                     parentId={node.id}
