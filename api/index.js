@@ -263,7 +263,11 @@ app.patch("/api/nodes/:id", async (req, res) => {
       }
     }
     const updated = await getNode(req.params.id);
-    updated ? res.json(updated) : res.status(404).json({ message: "Not found" });
+    if (!updated) return res.status(404).json({ message: "Not found" });
+    if (data.status) {
+      await syncTranscriptStatus(updated, data.status);
+    }
+    res.json(updated);
   } catch (err) {
     console.error("[update] Error:", err.message);
     res.status(500).json({ error: "Database error" });
@@ -315,11 +319,33 @@ app.post("/api/nodes/:id/move", async (req, res) => {
   }
 });
 
+// Helper: sync transcript text node status when a song's status changes
+async function syncTranscriptStatus(songNode, newStatus) {
+  const FOLDER_TITLE = "i prefer to read 🤓";
+  if (songNode.type !== "song" || !songNode.parentId) return;
+  const { rows: siblings } = await pool.query(
+    `SELECT id, type, title FROM menu_nodes WHERE parent_id = $1`,
+    [songNode.parentId]
+  );
+  const readFolder = siblings.find(s => s.type === "folder" && s.title === FOLDER_TITLE);
+  if (!readFolder) return;
+  const { rows: folderChildren } = await pool.query(
+    `SELECT id, type, title FROM menu_nodes WHERE parent_id = $1`,
+    [readFolder.id]
+  );
+  const matchingText = folderChildren.find(c => c.type === "text" && c.title === songNode.title);
+  if (matchingText) {
+    await pool.query(`UPDATE menu_nodes SET status = $1, updated_at = NOW() WHERE id = $2`, [newStatus, matchingText.id]);
+  }
+}
+
 app.post("/api/nodes/:id/publish", async (req, res) => {
   try {
     await pool.query(`UPDATE menu_nodes SET status = 'published', updated_at = NOW() WHERE id = $1`, [req.params.id]);
     const n = await getNode(req.params.id);
-    n ? res.json(n) : res.status(404).json({ message: "Not found" });
+    if (!n) return res.status(404).json({ message: "Not found" });
+    await syncTranscriptStatus(n, "published");
+    res.json(n);
   } catch (err) {
     res.status(500).json({ error: "Database error" });
   }
@@ -329,7 +355,9 @@ app.post("/api/nodes/:id/unpublish", async (req, res) => {
   try {
     await pool.query(`UPDATE menu_nodes SET status = 'draft', updated_at = NOW() WHERE id = $1`, [req.params.id]);
     const n = await getNode(req.params.id);
-    n ? res.json(n) : res.status(404).json({ message: "Not found" });
+    if (!n) return res.status(404).json({ message: "Not found" });
+    await syncTranscriptStatus(n, "draft");
+    res.json(n);
   } catch (err) {
     res.status(500).json({ error: "Database error" });
   }

@@ -161,6 +161,9 @@ export async function registerRoutes(
     if (!node) {
       return res.status(404).json({ message: "Node not found" });
     }
+    if (nodeData.status) {
+      await syncTranscriptStatus(node, nodeData.status);
+    }
     res.json(node);
   });
 
@@ -206,12 +209,31 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  // Helper: sync transcript text node status when a song's status changes
+  async function syncTranscriptStatus(songNode: { type: string; parentId: string | null; title: string }, newStatus: string) {
+    const FOLDER_TITLE = "i prefer to read 🤓";
+    if (songNode.type !== "song" || !songNode.parentId) return;
+    const siblings = await storage.getChildren(songNode.parentId);
+    const readFolder = siblings.find(
+      (n) => n.type === "folder" && n.title === FOLDER_TITLE
+    );
+    if (!readFolder) return;
+    const folderChildren = await storage.getChildren(readFolder.id);
+    const matchingText = folderChildren.find(
+      (n) => n.type === "text" && n.title === songNode.title
+    );
+    if (matchingText) {
+      await storage.updateNode(matchingText.id, { status: newStatus });
+    }
+  }
+
   // Publish
   app.post("/api/nodes/:id/publish", async (req, res) => {
     const node = await storage.updateNode(req.params.id, { status: "published" });
     if (!node) {
       return res.status(404).json({ message: "Node not found" });
     }
+    await syncTranscriptStatus(node, "published");
     res.json(node);
   });
 
@@ -221,6 +243,7 @@ export async function registerRoutes(
     if (!node) {
       return res.status(404).json({ message: "Node not found" });
     }
+    await syncTranscriptStatus(node, "draft");
     res.json(node);
   });
 
