@@ -166,6 +166,31 @@ export async function registerRoutes(
 
   // Delete node and descendants
   app.delete("/api/nodes/:id", async (req, res) => {
+    const FOLDER_TITLE = "i prefer to read 🤓";
+
+    // Before deleting, check if this is a song node and cascade-delete its transcript
+    const nodeToDelete = await storage.getNode(req.params.id);
+    if (nodeToDelete && nodeToDelete.type === "song" && nodeToDelete.parentId) {
+      const siblings = await storage.getChildren(nodeToDelete.parentId);
+      const readFolder = siblings.find(
+        (n) => n.type === "folder" && n.title === FOLDER_TITLE
+      );
+      if (readFolder) {
+        const folderChildren = await storage.getChildren(readFolder.id);
+        const matchingText = folderChildren.find(
+          (n) => n.type === "text" && n.title === nodeToDelete.title
+        );
+        if (matchingText) {
+          await storage.deleteNode(matchingText.id);
+        }
+        // If the folder is now empty, delete it too
+        const remaining = await storage.getChildren(readFolder.id);
+        if (remaining.length === 0) {
+          await storage.deleteNode(readFolder.id);
+        }
+      }
+    }
+
     const success = await storage.deleteNode(req.params.id);
     if (!success) {
       return res.status(404).json({ message: "Node not found" });
