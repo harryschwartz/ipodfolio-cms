@@ -458,6 +458,8 @@ export class DatabaseStorage implements IStorage {
       links: metadataData?.links || null,
       songIds: metadataData?.songIds || null,
       coverImages: metadataData?.coverImages || null,
+      trackNumber: metadataData?.trackNumber || null,
+      sourceNodeId: metadataData?.sourceNodeId || null,
       transcription: metadataData?.transcription || null,
     }).returning();
 
@@ -853,6 +855,8 @@ export class MemStorage implements IStorage {
         links: seed.metadata.links || null,
         songIds: seed.metadata.songIds || null,
         coverImages: seed.metadata.coverImages || null,
+        trackNumber: seed.metadata.trackNumber || null,
+        sourceNodeId: seed.metadata.sourceNodeId || null,
         transcription: seed.metadata.transcription || null,
       };
       this.metadata.set(seed.id, meta);
@@ -924,6 +928,8 @@ export class MemStorage implements IStorage {
       links: metadataData?.links || null,
       songIds: metadataData?.songIds || null,
       coverImages: metadataData?.coverImages || null,
+      trackNumber: metadataData?.trackNumber || null,
+      sourceNodeId: metadataData?.sourceNodeId || null,
       transcription: metadataData?.transcription || null,
     };
     this.metadata.set(id, meta);

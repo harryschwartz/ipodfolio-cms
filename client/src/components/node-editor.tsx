@@ -64,6 +64,7 @@ import { AudioRecorder } from "@/components/audio-recorder";
 import { AudioBadge } from "@/components/audio-badge";
 import { AudioTrimmer } from "@/components/audio-trimmer";
 import { ITunesSearchDialog } from "@/components/itunes-search-dialog";
+import { MusicLibraryView, PlaylistEditorView, isMusicFolder, MUSIC_FOLDER_ID } from "@/components/music-library-view";
 import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
@@ -1535,13 +1536,17 @@ export function NodeEditor({
                       />
                     </FieldGroup>
                   </div>
-                  <ChildrenList
-                    parentId={node.id}
-                    children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
-                    label="Songs"
-                    onSelectNode={onSelectNode}
-                    onAddNode={onAddNode}
-                  />
+                  {node.parentId === MUSIC_FOLDER_ID ? (
+                    <PlaylistEditorView node={node} allNodes={allNodes} onSelectNode={onSelectNode} />
+                  ) : (
+                    <ChildrenList
+                      parentId={node.id}
+                      children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                      label="Songs"
+                      onSelectNode={onSelectNode}
+                      onAddNode={onAddNode}
+                    />
+                  )}
                 </>
               )}
 
@@ -1639,84 +1644,91 @@ export function NodeEditor({
               {/* ── FOLDER ── */}
               {node.type === "folder" && (
                 <>
-                  <div>
-                    <SectionHeader>Preview Image</SectionHeader>
-                    <FieldGroup>
-                      <ImageUploader value={previewImage} onChange={setPreviewImage} onUpload={(f) => handleImageUpload(f, setPreviewImage)} />
-                    </FieldGroup>
-                    <div className="mt-6">
-                      <SectionHeader>Display</SectionHeader>
-                      <FieldGroup>
-                        <div className="flex items-center gap-3">
-                          <Switch
-                            id="split-screen"
-                            checked={splitScreen}
-                            onCheckedChange={setSplitScreen}
-                          />
-                          <Label htmlFor="split-screen" className="text-sm font-semibold">
-                            Split screen layout
-                          </Label>
+                  {isMusicFolder(node.id) ? (
+                    /* Music folder gets a special library-style UI */
+                    <MusicLibraryView node={node} allNodes={allNodes} onSelectNode={onSelectNode} />
+                  ) : (
+                    <>
+                      <div>
+                        <SectionHeader>Preview Image</SectionHeader>
+                        <FieldGroup>
+                          <ImageUploader value={previewImage} onChange={setPreviewImage} onUpload={(f) => handleImageUpload(f, setPreviewImage)} />
+                        </FieldGroup>
+                        <div className="mt-6">
+                          <SectionHeader>Display</SectionHeader>
+                          <FieldGroup>
+                            <div className="flex items-center gap-3">
+                              <Switch
+                                id="split-screen"
+                                checked={splitScreen}
+                                onCheckedChange={setSplitScreen}
+                              />
+                              <Label htmlFor="split-screen" className="text-sm font-semibold">
+                                Split screen layout
+                              </Label>
+                            </div>
+                          </FieldGroup>
                         </div>
-                      </FieldGroup>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <SectionHeader>Photos</SectionHeader>
-                      {photos.length > 0 && (
-                        <Button
-                          size="sm"
-                          variant={photoSelectMode ? "default" : "outline"}
-                          className="h-7 text-xs gap-1.5"
-                          onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
-                        >
-                          {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
-                        </Button>
-                      )}
-                    </div>
-                    {photoSelectMode && (
-                      <div className="flex items-center gap-2 mb-2">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
-                        <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
-                        {selectedPhotoIndices.size > 0 && (
-                          <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
-                            <ArrowRightLeft className="h-3 w-3" /> Move to Album
-                          </Button>
-                        )}
                       </div>
-                    )}
-                    <FieldGroup className="p-0 overflow-hidden space-y-0">
-                      <PhotoGrid
-                        photos={photos}
-                        setPhotos={setPhotos}
-                        photoListRef={photoListRef}
-                        photoDragIdx={photoDragIdx}
-                        photoOverIdx={photoOverIdx}
-                        onDragStart={handlePhotoDragStart}
-                        onDragOver={handlePhotoDragOver}
-                        onDrop={handlePhotoDrop}
-                        onDragEnd={handlePhotoDragEnd}
-                        onTouchMove={handlePhotoTouchMove}
-                        onTouchEnd={handlePhotoTouchEnd}
-                        onGripTouchStart={handlePhotoGripTouchStart}
-                        uploadingPhotos={uploadingPhotos}
-                        uploadProgress={uploadProgress}
-                        isDraggingOver={isDraggingOver}
-                        onFileDrop={handleFileDrop}
-                        selectMode={photoSelectMode}
-                        selectedIndices={selectedPhotoIndices}
-                        onToggleSelect={togglePhotoSelect}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <SectionHeader>Photos</SectionHeader>
+                          {photos.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant={photoSelectMode ? "default" : "outline"}
+                              className="h-7 text-xs gap-1.5"
+                              onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
+                            >
+                              {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
+                            </Button>
+                          )}
+                        </div>
+                        {photoSelectMode && (
+                          <div className="flex items-center gap-2 mb-2">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
+                            <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
+                            {selectedPhotoIndices.size > 0 && (
+                              <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
+                                <ArrowRightLeft className="h-3 w-3" /> Move to Album
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                        <FieldGroup className="p-0 overflow-hidden space-y-0">
+                          <PhotoGrid
+                            photos={photos}
+                            setPhotos={setPhotos}
+                            photoListRef={photoListRef}
+                            photoDragIdx={photoDragIdx}
+                            photoOverIdx={photoOverIdx}
+                            onDragStart={handlePhotoDragStart}
+                            onDragOver={handlePhotoDragOver}
+                            onDrop={handlePhotoDrop}
+                            onDragEnd={handlePhotoDragEnd}
+                            onTouchMove={handlePhotoTouchMove}
+                            onTouchEnd={handlePhotoTouchEnd}
+                            onGripTouchStart={handlePhotoGripTouchStart}
+                            uploadingPhotos={uploadingPhotos}
+                            uploadProgress={uploadProgress}
+                            isDraggingOver={isDraggingOver}
+                            onFileDrop={handleFileDrop}
+                            selectMode={photoSelectMode}
+                            selectedIndices={selectedPhotoIndices}
+                            onToggleSelect={togglePhotoSelect}
+                          />
+                        </FieldGroup>
+                      </div>
+                      <ChildrenList
+                        parentId={node.id}
+                        children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
+                        label="Children"
+                        onSelectNode={onSelectNode}
+                        onAddNode={onAddNode}
                       />
-                    </FieldGroup>
-                  </div>
-                  <ChildrenList
-                    parentId={node.id}
-                    children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
-                    label="Children"
-                    onSelectNode={onSelectNode}
-                    onAddNode={onAddNode}
-                  />
+                    </>
+                  )}
                 </>
               )}
 

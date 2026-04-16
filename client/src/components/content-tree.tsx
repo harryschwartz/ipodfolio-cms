@@ -23,6 +23,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AudioBadge } from "@/components/audio-badge";
+import { isHiddenMusicChild } from "@/components/music-library-view";
 
 const TYPE_ICONS: Record<string, any> = {
   folder: Folder,
@@ -90,7 +91,7 @@ const TYPE_LABELS: Record<string, [string, string]> = {
 };
 
 function getChildrenSummary(nodeId: string, nodes: MenuNodeWithMetadata[]): string {
-  const children = nodes.filter((n) => n.parentId === nodeId);
+  const children = nodes.filter((n) => n.parentId === nodeId && !isHiddenMusicChild(n.id, n.parentId));
   if (children.length === 0) return "";
   const counts = new Map<string, number>();
   for (const child of children) {
@@ -234,7 +235,7 @@ function TreeNode({
   };
 
   const children = nodes
-    .filter((n) => n.parentId === node.id)
+    .filter((n) => n.parentId === node.id && !isHiddenMusicChild(n.id, n.parentId))
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (

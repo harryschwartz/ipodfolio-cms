@@ -21,6 +21,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { NodeEditor } from "@/components/node-editor";
 import { AudioBadge } from "@/components/audio-badge";
 import { ITunesSearchDialog } from "@/components/itunes-search-dialog";
+import { isHiddenMusicChild } from "@/components/music-library-view";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 const TYPE_ICONS: Record<string, any> = {
@@ -71,7 +72,7 @@ const TYPE_LABELS: Record<string, [string, string]> = {
 };
 
 function getChildrenSummary(nodeId: string, nodes: MenuNodeWithMetadata[]): string {
-  const children = nodes.filter((n) => n.parentId === nodeId);
+  const children = nodes.filter((n) => n.parentId === nodeId && !isHiddenMusicChild(n.id, n.parentId));
   if (children.length === 0) return "";
   const counts = new Map<string, number>();
   for (const child of children) {
@@ -246,7 +247,7 @@ function BrowserColumn({
   onDropOnBackground: (e: React.DragEvent, parentId: string | null) => void;
 }) {
   const items = nodes
-    .filter((n) => n.parentId === parentId)
+    .filter((n) => n.parentId === parentId && !isHiddenMusicChild(n.id, n.parentId))
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   const [itunesOpen, setItunesOpen] = useState(false);

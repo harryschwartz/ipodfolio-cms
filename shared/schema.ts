@@ -35,6 +35,8 @@ export const nodeMetadata = pgTable("node_metadata", {
   links: jsonb("links").$type<Array<{ label: string; url: string }>>(),
   songIds: jsonb("song_ids").$type<string[]>(),
   coverImages: jsonb("cover_images").$type<string[]>(),
+  trackNumber: integer("track_number"),
+  sourceNodeId: uuid("source_node_id"),
   transcription: jsonb("transcription").$type<{
     text: string;
     words: Array<{ word: string; start: number; end: number }>;

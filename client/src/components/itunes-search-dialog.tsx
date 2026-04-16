@@ -25,6 +25,7 @@ interface ITunesTrack {
   artworkUrl100: string;
   previewUrl: string;
   trackTimeMillis: number;
+  trackNumber?: number;
 }
 
 interface ITunesAlbum {
@@ -187,6 +188,7 @@ export function ITunesSearchDialog({
             coverImageUrl: getHighResArt(track.artworkUrl100) || null,
             artistName: track.artistName || null,
             albumName: track.collectionName || null,
+            trackNumber: track.trackNumber || null,
           },
         });
       }
