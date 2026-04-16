@@ -276,7 +276,7 @@ export async function registerRoutes(
     }
     const entity = (req.query.entity as string) || "song";
     const limit = (req.query.limit as string) || "25";
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=${encodeURIComponent(entity)}&limit=${encodeURIComponent(limit)}`;
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=${encodeURIComponent(entity)}&limit=${encodeURIComponent(limit)}&country=US`;
     try {
       const response = await fetch(url);
       const data = await response.json();

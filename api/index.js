@@ -363,6 +363,35 @@ app.post("/api/nodes/:id/unpublish", async (req, res) => {
   }
 });
 
+// ---- ITUNES PROXY ----
+app.get("/api/itunes/search", async (req, res) => {
+  const term = req.query.term;
+  if (!term) return res.status(400).json({ message: "Missing 'term' parameter" });
+  const entity = req.query.entity || "song";
+  const limit = req.query.limit || "25";
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=${encodeURIComponent(entity)}&limit=${encodeURIComponent(limit)}&country=US`;
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ message: `iTunes API error: ${err.message}` });
+  }
+});
+
+app.get("/api/itunes/lookup", async (req, res) => {
+  const id = req.query.id;
+  if (!id) return res.status(400).json({ message: "Missing 'id' parameter" });
+  const url = `https://itunes.apple.com/lookup?id=${encodeURIComponent(id)}&entity=song`;
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ message: `iTunes API error: ${err.message}` });
+  }
+});
+
 app.post("/api/upload/audio", upload.single("file"), (req, res) => { if (!req.file) return res.status(400).json({ message: "No file" }); res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` }); });
 app.post("/api/upload/image", upload.single("file"), (req, res) => { if (!req.file) return res.status(400).json({ message: "No file" }); res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` }); });
 app.post("/api/upload/video", upload.single("file"), (req, res) => { if (!req.file) return res.status(400).json({ message: "No file" }); res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` }); });
