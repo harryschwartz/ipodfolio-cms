@@ -17,7 +17,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-interface ITunesTrack {
+export interface ITunesTrack {
   trackId: number;
   trackName: string;
   artistName: string;
@@ -49,7 +49,7 @@ function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function getHighResArt(url: string): string {
+export function getHighResArt(url: string): string {
   return url.replace("100x100", "600x600");
 }
 
@@ -58,11 +58,13 @@ export function ITunesSearchDialog({
   onOpenChange,
   parentId,
   existingChildCount,
+  onAddTracks,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   parentId: string;
   existingChildCount: number;
+  onAddTracks?: (tracks: ITunesTrack[]) => Promise<void>;
 }) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
@@ -169,34 +171,37 @@ export function ITunesSearchDialog({
   const handleAddSelected = useCallback(async () => {
     if (selectedTrackIds.size === 0) return;
     setAdding(true);
-    let sortOrder = existingChildCount;
 
     try {
       const trackIds = Array.from(selectedTrackIds);
-      for (const trackId of trackIds) {
-        const track = trackDataMap.get(trackId);
-        if (!track) continue;
+      const tracks = trackIds.map((id) => trackDataMap.get(id)).filter(Boolean) as ITunesTrack[];
 
-        await apiRequest("POST", "/api/nodes", {
-          parentId,
-          type: "song",
-          title: track.trackName,
-          sortOrder: sortOrder++,
-          status: "published",
-          metadata: {
-            audioUrl: track.previewUrl || null,
-            coverImageUrl: getHighResArt(track.artworkUrl100) || null,
-            artistName: track.artistName || null,
-            albumName: track.collectionName || null,
-            trackNumber: track.trackNumber || null,
-          },
-        });
+      if (onAddTracks) {
+        await onAddTracks(tracks);
+      } else {
+        let sortOrder = existingChildCount;
+        for (const track of tracks) {
+          await apiRequest("POST", "/api/nodes", {
+            parentId,
+            type: "song",
+            title: track.trackName,
+            sortOrder: sortOrder++,
+            status: "published",
+            metadata: {
+              audioUrl: track.previewUrl || null,
+              coverImageUrl: getHighResArt(track.artworkUrl100) || null,
+              artistName: track.artistName || null,
+              albumName: track.collectionName || null,
+              trackNumber: track.trackNumber || null,
+            },
+          });
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
       toast({
         title: "Songs added",
-        description: `Added ${trackIds.length} song${trackIds.length !== 1 ? "s" : ""} from iTunes.`,
+        description: `Added ${tracks.length} song${tracks.length !== 1 ? "s" : ""} from iTunes.`,
       });
       onOpenChange(false);
       setSearchTerm("");
@@ -209,7 +214,7 @@ export function ITunesSearchDialog({
     } finally {
       setAdding(false);
     }
-  }, [selectedTrackIds, trackDataMap, parentId, existingChildCount, onOpenChange, toast]);
+  }, [selectedTrackIds, trackDataMap, parentId, existingChildCount, onOpenChange, onAddTracks, toast]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

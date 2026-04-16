@@ -299,13 +299,13 @@ function ChildrenList({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
         <SectionHeader>{label}</SectionHeader>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setItunesOpen(true)}>
             <Search className="h-3 w-3" />iTunes
           </Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 mr-1" onClick={() => onAddNode(parentId)}>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => onAddNode(parentId)}>
             <Plus className="h-3 w-3" />Add
           </Button>
         </div>
@@ -1232,7 +1232,7 @@ export function NodeEditor({
   const headerBg = TYPE_HEADER_BG[node.type] || "bg-gradient-to-r from-indigo-50 to-violet-50";
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col overflow-hidden w-full max-w-full">
+    <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden w-full max-w-full">
       {/* Colored gradient accent stripe */}
       <div className={cn("h-1.5 w-full bg-gradient-to-r flex-shrink-0", gradient)} />
 

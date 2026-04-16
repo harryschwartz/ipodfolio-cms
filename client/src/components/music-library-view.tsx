@@ -24,7 +24,8 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AudioBadge } from "@/components/audio-badge";
-import { ITunesSearchDialog } from "@/components/itunes-search-dialog";
+import { ITunesSearchDialog, getHighResArt } from "@/components/itunes-search-dialog";
+import type { ITunesTrack } from "@/components/itunes-search-dialog";
 import { cn } from "@/lib/utils";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 
@@ -98,43 +99,42 @@ export function MusicLibraryView({
 
   return (
     <div className="space-y-6">
-      {/* Action buttons */}
-      <div className="flex items-center gap-2">
-        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setItunesOpen(true)}>
-          <Search className="h-3.5 w-3.5" />
-          Add from iTunes
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-1.5"
-          onClick={handleCreatePlaylist}
-          disabled={creatingPlaylist}
-        >
-          {creatingPlaylist ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      {/* ── Playlists Section ── */}
+      <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-muted/40 border-b border-border min-w-0">
+          <div className="flex items-center gap-2">
+            <ListMusic className="h-4 w-4 text-blue-600" />
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">
+              Playlists
+              {playlists.length > 0 && (
+                <span className="ml-2 text-muted-foreground/40 normal-case font-medium tracking-normal">
+                  {playlists.length}
+                </span>
+              )}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1 flex-shrink-0"
+            onClick={handleCreatePlaylist}
+            disabled={creatingPlaylist}
+          >
+            {creatingPlaylist ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Plus className="h-3 w-3" />
+            )}
+            Create Playlist
+          </Button>
+        </div>
+        <div className="bg-white">
+          {playlists.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              No playlists yet. Create one to organize your songs.
+            </div>
           ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-          Create Playlist
-        </Button>
-      </div>
-
-      <ITunesSearchDialog
-        open={itunesOpen}
-        onOpenChange={setItunesOpen}
-        parentId={MUSIC_FOLDER_ID}
-        existingChildCount={librarySongs.length}
-      />
-
-      {/* Playlists section */}
-      {playlists.length > 0 && (
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-3">
-            Playlists
-          </p>
-          <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
-            {playlists.map((playlist) => {
+            playlists.map((playlist) => {
               const playlistSongCount = allNodes.filter(
                 (n) => n.parentId === playlist.id && n.type === "song"
               ).length;
@@ -157,22 +157,31 @@ export function MusicLibraryView({
                   <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
                 </div>
               );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Library Songs section */}
-      <div>
-        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-3">
-          Library Songs
-          {librarySongs.length > 0 && (
-            <span className="ml-2 text-muted-foreground/40 normal-case font-medium tracking-normal">
-              {librarySongs.length}
-            </span>
+            })
           )}
-        </p>
-        <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
+        </div>
+      </div>
+
+      {/* ── Library Section ── */}
+      <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-muted/40 border-b border-border min-w-0">
+          <div className="flex items-center gap-2">
+            <Music className="h-4 w-4 text-emerald-600" />
+            <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">
+              Library
+              {librarySongs.length > 0 && (
+                <span className="ml-2 text-muted-foreground/40 normal-case font-medium tracking-normal">
+                  {librarySongs.length}
+                </span>
+              )}
+            </p>
+          </div>
+          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 flex-shrink-0" onClick={() => setItunesOpen(true)}>
+            <Search className="h-3 w-3" />
+            Add from iTunes
+          </Button>
+        </div>
+        <div className="bg-white">
           {librarySongs.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
               No songs in library yet. Add songs from iTunes to get started.
@@ -184,11 +193,18 @@ export function MusicLibraryView({
           )}
         </div>
       </div>
+
+      <ITunesSearchDialog
+        open={itunesOpen}
+        onOpenChange={setItunesOpen}
+        parentId={MUSIC_FOLDER_ID}
+        existingChildCount={librarySongs.length}
+      />
     </div>
   );
 }
 
-/** Playlist editor view: shows playlist songs + "Add from Library" */
+/** Playlist editor view: shows playlist songs + "Add from Library" + "Add from iTunes" */
 export function PlaylistEditorView({
   node,
   allNodes,
@@ -199,19 +215,66 @@ export function PlaylistEditorView({
   onSelectNode: (id: string) => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [itunesOpen, setItunesOpen] = useState(false);
 
   // Songs in this playlist
   const playlistSongs = allNodes
     .filter((n) => n.parentId === node.id && n.type === "song")
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
+  // Library songs count (for sort order when adding to library)
+  const librarySongs = allNodes
+    .filter((n) => n.parentId === MUSIC_FOLDER_ID && n.type === "song");
+
   // Check if this playlist is under the Music folder
   const isUnderMusic = node.parentId === MUSIC_FOLDER_ID;
 
+  // Add iTunes tracks to both library and playlist
+  const handleAddFromItunes = useCallback(async (tracks: ITunesTrack[]) => {
+    let librarySortOrder = librarySongs.length;
+    let playlistSortOrder = playlistSongs.length;
+
+    for (const track of tracks) {
+      // 1. Create song in the library
+      const libRes = await apiRequest("POST", "/api/nodes", {
+        parentId: MUSIC_FOLDER_ID,
+        type: "song",
+        title: track.trackName,
+        sortOrder: librarySortOrder++,
+        status: "published",
+        metadata: {
+          audioUrl: track.previewUrl || null,
+          coverImageUrl: getHighResArt(track.artworkUrl100) || null,
+          artistName: track.artistName || null,
+          albumName: track.collectionName || null,
+          trackNumber: track.trackNumber || null,
+        },
+      });
+      const librarySong = await libRes.json();
+
+      // 2. Create playlist reference pointing to the library song
+      await apiRequest("POST", "/api/nodes", {
+        parentId: node.id,
+        type: "song",
+        title: track.trackName,
+        sortOrder: playlistSortOrder++,
+        status: "published",
+        metadata: {
+          audioUrl: track.previewUrl || null,
+          coverImageUrl: getHighResArt(track.artworkUrl100) || null,
+          artistName: track.artistName || null,
+          albumName: track.collectionName || null,
+          trackNumber: track.trackNumber || null,
+          sourceNodeId: librarySong.id,
+        },
+      });
+    }
+  }, [librarySongs.length, playlistSongs.length, node.id]);
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">
+      <div className="flex items-center justify-between gap-2 mb-3 min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50 flex-shrink-0">
           Songs
           {playlistSongs.length > 0 && (
             <span className="ml-2 text-muted-foreground/40 normal-case font-medium tracking-normal">
@@ -220,10 +283,16 @@ export function PlaylistEditorView({
           )}
         </p>
         {isUnderMusic && (
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setPickerOpen(true)}>
-            <Plus className="h-3 w-3" />
-            Add from Library
-          </Button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setItunesOpen(true)}>
+              <Search className="h-3 w-3" />
+              Add from iTunes
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setPickerOpen(true)}>
+              <Plus className="h-3 w-3" />
+              Add from Library
+            </Button>
+          </div>
         )}
       </div>
       <div className="rounded-xl border border-border bg-white shadow-sm overflow-hidden">
@@ -239,13 +308,22 @@ export function PlaylistEditorView({
       </div>
 
       {isUnderMusic && (
-        <LibrarySongPicker
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          allNodes={allNodes}
-          playlistId={node.id}
-          existingPlaylistSongs={playlistSongs}
-        />
+        <>
+          <LibrarySongPicker
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            allNodes={allNodes}
+            playlistId={node.id}
+            existingPlaylistSongs={playlistSongs}
+          />
+          <ITunesSearchDialog
+            open={itunesOpen}
+            onOpenChange={setItunesOpen}
+            parentId={MUSIC_FOLDER_ID}
+            existingChildCount={librarySongs.length}
+            onAddTracks={handleAddFromItunes}
+          />
+        </>
       )}
     </div>
   );
