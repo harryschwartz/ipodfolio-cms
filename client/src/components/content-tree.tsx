@@ -183,6 +183,7 @@ function TreeNode({
   onDragLeave,
   onDrop,
   dragOverId,
+  dragOverPosition,
   dropFolderId,
   onTogglePublish,
 }: {
@@ -200,6 +201,7 @@ function TreeNode({
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, nodeId: string) => void;
   dragOverId: string | null;
+  dragOverPosition: "above" | "below" | null;
   dropFolderId: string | null;
   onTogglePublish: (node: MenuNodeWithMetadata) => void;
 }) {
@@ -211,6 +213,8 @@ function TreeNode({
   const isSelected = node.id === selectedNodeId || selectedIds.has(node.id);
   const isMultiSelected = selectedIds.has(node.id);
   const isSiblingDragOver = node.id === dragOverId;
+  const isDragAbove = isSiblingDragOver && dragOverPosition === "above";
+  const isDragBelow = isSiblingDragOver && dragOverPosition === "below";
   const isFolderDropTarget = node.id === dropFolderId;
   const isMobile = useIsMobile();
   const hasCover = (node.metadata as any)?.coverImageUrl || (node.metadata as any)?.coverEmoji;
@@ -243,8 +247,9 @@ function TreeNode({
             ? cn("text-foreground font-medium", selectedBg)
             : "text-foreground/70 hover:text-foreground hover:bg-muted/60",
           isMultiSelected && "bg-indigo-50 shadow-[inset_3px_0_0_theme(colors.indigo.400)] text-foreground font-medium",
-          isSiblingDragOver && "border-t-2 border-primary/60",
-          isFolderDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary/40"
+          isDragAbove && "border-t-2 border-primary",
+          isDragBelow && "border-b-2 border-primary",
+          isFolderDropTarget && "bg-primary/10 ring-2 ring-inset ring-primary/40 rounded-md"
         )}
         style={{ paddingLeft: `${depth * 16 + 10}px` }}
         onClick={(e) => {
@@ -366,6 +371,7 @@ function TreeNode({
               onDragLeave={onDragLeave}
               onDrop={onDrop}
               dragOverId={dragOverId}
+              dragOverPosition={dragOverPosition}
               dropFolderId={dropFolderId}
               onTogglePublish={onTogglePublish}
             />
@@ -403,6 +409,7 @@ export function ContentTree({
     : expandedIds;
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<"above" | "below" | null>(null);
   const [dropFolderId, setDropFolderId] = useState<string | null>(null);
 
   const toggleExpanded = useCallback((id: string) => {
@@ -449,22 +456,26 @@ export function ContentTree({
   const handleDragOver = useCallback((e: React.DragEvent, nodeId: string) => {
     e.preventDefault();
     const sourceId = e.dataTransfer.getData("text/plain") || dragNodeId;
-    const sourceNode = nodes.find((n) => n.id === sourceId);
+    if (sourceId === nodeId) return;
+
     const targetNode = nodes.find((n) => n.id === nodeId);
-    if (!sourceNode || !targetNode || sourceId === nodeId) return;
+    if (!targetNode) return;
 
     const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === nodeId);
-    const crossParent = sourceNode.parentId !== targetNode.parentId;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const ratio = y / rect.height;
 
-    if (targetIsFolder && crossParent) {
+    if (targetIsFolder && ratio > 0.25 && ratio < 0.75) {
+      // Middle zone of a folder → drop INTO folder
       setDropFolderId(nodeId);
       setDragOverId(null);
-    } else if (!crossParent) {
-      setDragOverId(nodeId);
-      setDropFolderId(null);
+      setDragOverPosition(null);
     } else {
-      setDragOverId(nodeId);
+      // Top/bottom zone or non-folder → reorder as sibling
       setDropFolderId(null);
+      setDragOverId(nodeId);
+      setDragOverPosition(ratio < 0.5 ? "above" : "below");
     }
   }, [nodes, dragNodeId]);
 
@@ -472,13 +483,17 @@ export function ContentTree({
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDropFolderId(null);
       setDragOverId(null);
+      setDragOverPosition(null);
     }
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
+    const currentDropFolderId = dropFolderId;
+    const currentDragOverPosition = dragOverPosition;
     setDragOverId(null);
     setDropFolderId(null);
+    setDragOverPosition(null);
 
     let dragIds: string[];
     try {
@@ -492,9 +507,8 @@ export function ContentTree({
     const targetNode = nodes.find((n) => n.id === targetId);
     if (!targetNode) return;
 
-    const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === targetId);
-
-    if (targetIsFolder) {
+    // Only reparent into folder if the visual indicator showed folder-drop mode
+    if (currentDropFolderId === targetId) {
       const targetChildren = nodes
         .filter((n) => n.parentId === targetId)
         .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -513,25 +527,59 @@ export function ContentTree({
       ));
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
       setExpandedIds((prev) => new Set([...prev, targetId]));
-    } else if (dragIds.length === 1) {
+    } else {
+      // Sibling reorder mode
       const sourceId = dragIds[0];
       const sourceNode = nodes.find((n) => n.id === sourceId);
-      if (!sourceNode || sourceNode.parentId !== targetNode.parentId) return;
+      if (!sourceNode) return;
 
-      const siblings = nodes
-        .filter((n) => n.parentId === sourceNode.parentId)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-      const orderedIds = siblings.map((n) => n.id);
-      const fromIndex = orderedIds.indexOf(sourceId);
-      const toIndex = orderedIds.indexOf(targetId);
-      orderedIds.splice(fromIndex, 1);
-      orderedIds.splice(toIndex, 0, sourceId);
+      const targetParentId = targetNode.parentId;
 
-      const parentParam = sourceNode.parentId || "root";
-      await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
-      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      if (sourceNode.parentId === targetParentId) {
+        // Same parent — simple reorder
+        const siblings = nodes
+          .filter((n) => n.parentId === targetParentId)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        const orderedIds = siblings.map((n) => n.id);
+        const fromIndex = orderedIds.indexOf(sourceId);
+        let toIndex = orderedIds.indexOf(targetId);
+        orderedIds.splice(fromIndex, 1);
+        if (currentDragOverPosition === "below") toIndex = Math.min(toIndex + 1, orderedIds.length);
+        if (fromIndex < toIndex) toIndex = Math.max(0, toIndex);
+        orderedIds.splice(toIndex, 0, sourceId);
+
+        const parentParam = targetParentId || "root";
+        await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
+        queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      } else {
+        // Cross-parent: move to target's parent at the right position
+        const siblings = nodes
+          .filter((n) => n.parentId === targetParentId)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        const orderedIds = siblings.map((n) => n.id);
+        let toIndex = orderedIds.indexOf(targetId);
+        if (currentDragOverPosition === "below") toIndex++;
+
+        // Move node to new parent first
+        for (const id of dragIds) {
+          await apiRequest("PATCH", `/api/nodes/${id}`, {
+            parentId: targetParentId,
+            sortOrder: 0,
+          });
+        }
+        // Then reorder
+        const newOrderedIds = [...orderedIds];
+        for (const id of dragIds) {
+          newOrderedIds.splice(toIndex, 0, id);
+          toIndex++;
+        }
+
+        const parentParam = targetParentId || "root";
+        await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds: newOrderedIds });
+        queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      }
     }
-  }, [nodes]);
+  }, [nodes, dropFolderId, dragOverPosition]);
 
   const rootNodes = nodes.filter((n) => !n.parentId).sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -554,6 +602,7 @@ export function ContentTree({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           dragOverId={dragOverId}
+          dragOverPosition={dragOverPosition}
           dropFolderId={dropFolderId}
           onTogglePublish={handleTogglePublish}
         />

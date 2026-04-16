@@ -94,7 +94,8 @@ function ColumnItem({
   isSelected,
   isMultiSelected,
   isInPath,
-  isSiblingDragOver,
+  isDragAbove,
+  isDragBelow,
   isFolderDropTarget,
   onClick,
   onLongPress,
@@ -108,7 +109,8 @@ function ColumnItem({
   isSelected: boolean;
   isMultiSelected: boolean;
   isInPath: boolean;
-  isSiblingDragOver: boolean;
+  isDragAbove: boolean;
+  isDragBelow: boolean;
   isFolderDropTarget: boolean;
   onClick: (e: React.MouseEvent) => void;
   onLongPress: () => void;
@@ -146,8 +148,9 @@ function ColumnItem({
           : isInPath
           ? "bg-primary/10 text-foreground"
           : "text-foreground/80 hover:bg-muted/70 hover:text-foreground",
-        isSiblingDragOver && "border-t-2 border-primary/60",
-        isFolderDropTarget && !isSelected && "bg-primary/15 ring-2 ring-inset ring-primary/40"
+        isDragAbove && "border-t-2 border-primary",
+        isDragBelow && "border-b-2 border-primary",
+        isFolderDropTarget && !isSelected && "bg-primary/15 ring-2 ring-inset ring-primary/40 rounded-md"
       )}
       onClick={(e) => { if (didLongPress.current) { didLongPress.current = false; return; } onClick(e); }}
       onTouchStart={handleTouchStart}
@@ -233,7 +236,7 @@ function BrowserColumn({
   onClickNode: (node: MenuNodeWithMetadata, e: React.MouseEvent) => void;
   onLongPressNode: (node: MenuNodeWithMetadata) => void;
   onAddNode: (parentId: string | null) => void;
-  dragState: { dragOverId: string | null; dropFolderId: string | null };
+  dragState: { dragOverId: string | null; dragOverPosition: "above" | "below" | null; dropFolderId: string | null };
   onDragStart: (e: React.DragEvent, nodeId: string) => void;
   onDragOver: (e: React.DragEvent, nodeId: string) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -291,7 +294,8 @@ function BrowserColumn({
               isSelected={node.id === selectedNodeId}
               isMultiSelected={selectedIds.has(node.id)}
               isInPath={columnPath.includes(node.id)}
-              isSiblingDragOver={node.id === dragState.dragOverId}
+              isDragAbove={node.id === dragState.dragOverId && dragState.dragOverPosition === "above"}
+              isDragBelow={node.id === dragState.dragOverId && dragState.dragOverPosition === "below"}
               isFolderDropTarget={node.id === dragState.dropFolderId}
               onClick={(e) => onClickNode(node, e)}
               onLongPress={() => onLongPressNode(node)}
@@ -345,6 +349,7 @@ export function ColumnBrowser({
   // Drag state
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<"above" | "below" | null>(null);
   const [dropFolderId, setDropFolderId] = useState<string | null>(null);
 
   // Auto-scroll right when new column opens
@@ -436,22 +441,24 @@ export function ColumnBrowser({
     e.preventDefault();
     e.stopPropagation();
     const sourceId = e.dataTransfer.getData("text/plain") || dragNodeId;
-    const sourceNode = nodes.find((n) => n.id === sourceId);
+    if (sourceId === nodeId) return;
+
     const targetNode = nodes.find((n) => n.id === nodeId);
-    if (!sourceNode || !targetNode || sourceId === nodeId) return;
+    if (!targetNode) return;
 
     const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === nodeId);
-    const crossParent = sourceNode.parentId !== targetNode.parentId;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const ratio = y / rect.height;
 
-    if (targetIsFolder && crossParent) {
+    if (targetIsFolder && ratio > 0.25 && ratio < 0.75) {
       setDropFolderId(nodeId);
       setDragOverId(null);
-    } else if (!crossParent) {
-      setDragOverId(nodeId);
-      setDropFolderId(null);
+      setDragOverPosition(null);
     } else {
-      setDragOverId(nodeId);
       setDropFolderId(null);
+      setDragOverId(nodeId);
+      setDragOverPosition(ratio < 0.5 ? "above" : "below");
     }
   }, [nodes, dragNodeId]);
 
@@ -459,14 +466,18 @@ export function ColumnBrowser({
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDropFolderId(null);
       setDragOverId(null);
+      setDragOverPosition(null);
     }
   }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     e.stopPropagation();
+    const currentDropFolderId = dropFolderId;
+    const currentDragOverPosition = dragOverPosition;
     setDragOverId(null);
     setDropFolderId(null);
+    setDragOverPosition(null);
 
     let dragIds: string[];
     try {
@@ -480,9 +491,8 @@ export function ColumnBrowser({
     const targetNode = nodes.find((n) => n.id === targetId);
     if (!targetNode) return;
 
-    const targetIsFolder = FOLDER_TYPES.has(targetNode.type) || nodes.some((n) => n.parentId === targetId);
-
-    if (targetIsFolder) {
+    if (currentDropFolderId === targetId) {
+      // Drop INTO folder
       const targetChildren = nodes
         .filter((n) => n.parentId === targetId)
         .sort((a, b) => a.sortOrder - b.sortOrder);
@@ -500,24 +510,54 @@ export function ColumnBrowser({
         })
       ));
       queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
-    } else if (dragIds.length === 1) {
+    } else {
+      // Sibling reorder
       const sourceId = dragIds[0];
       const sourceNode = nodes.find((n) => n.id === sourceId);
-      if (!sourceNode || sourceNode.parentId !== targetNode.parentId) return;
+      if (!sourceNode) return;
 
-      const siblings = nodes
-        .filter((n) => n.parentId === sourceNode.parentId)
-        .sort((a, b) => a.sortOrder - b.sortOrder);
-      const orderedIds = siblings.map((n) => n.id);
-      const fromIndex = orderedIds.indexOf(sourceId);
-      const toIndex = orderedIds.indexOf(targetId);
-      orderedIds.splice(fromIndex, 1);
-      orderedIds.splice(toIndex, 0, sourceId);
-      const parentParam = sourceNode.parentId || "root";
-      await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
-      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      const targetParentId = targetNode.parentId;
+
+      if (sourceNode.parentId === targetParentId) {
+        const siblings = nodes
+          .filter((n) => n.parentId === targetParentId)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        const orderedIds = siblings.map((n) => n.id);
+        const fromIndex = orderedIds.indexOf(sourceId);
+        let toIndex = orderedIds.indexOf(targetId);
+        orderedIds.splice(fromIndex, 1);
+        if (currentDragOverPosition === "below") toIndex = Math.min(toIndex + 1, orderedIds.length);
+        if (fromIndex < toIndex) toIndex = Math.max(0, toIndex);
+        orderedIds.splice(toIndex, 0, sourceId);
+        const parentParam = targetParentId || "root";
+        await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds });
+        queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      } else {
+        // Cross-parent: move to target's parent at the right position
+        const siblings = nodes
+          .filter((n) => n.parentId === targetParentId)
+          .sort((a, b) => a.sortOrder - b.sortOrder);
+        const orderedIds = siblings.map((n) => n.id);
+        let toIndex = orderedIds.indexOf(targetId);
+        if (currentDragOverPosition === "below") toIndex++;
+
+        for (const id of dragIds) {
+          await apiRequest("PATCH", `/api/nodes/${id}`, {
+            parentId: targetParentId,
+            sortOrder: 0,
+          });
+        }
+        const newOrderedIds = [...orderedIds];
+        for (const id of dragIds) {
+          newOrderedIds.splice(toIndex, 0, id);
+          toIndex++;
+        }
+        const parentParam = targetParentId || "root";
+        await apiRequest("POST", `/api/nodes/${parentParam}/reorder`, { orderedIds: newOrderedIds });
+        queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      }
     }
-  }, [nodes]);
+  }, [nodes, dropFolderId, dragOverPosition]);
 
   // Drop on column background → move to that column's parent (append to end)
   const handleDropOnBackground = useCallback(async (e: React.DragEvent, targetParentId: string | null) => {
@@ -561,7 +601,7 @@ export function ColumnBrowser({
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
 
-  const dragState = { dragOverId, dropFolderId };
+  const dragState = { dragOverId, dragOverPosition, dropFolderId };
 
   const editorDefaultSize = getStoredColumnPanelSize(35);
   const columnsDefaultSize = 100 - editorDefaultSize;
