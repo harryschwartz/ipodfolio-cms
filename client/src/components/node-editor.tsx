@@ -21,6 +21,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   Trash2,
   Save,
   Upload,
@@ -46,6 +53,9 @@ import {
   Pencil,
   ChevronDown,
   Loader2,
+  CheckSquare,
+  Square,
+  ArrowRightLeft,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -366,7 +376,7 @@ function ChildrenList({
   );
 }
 
-/** Photo grid with large thumbnails, drag-to-reorder, and delete */
+/** Photo grid with large thumbnails, drag-to-reorder, select mode, and delete */
 function PhotoGrid({
   photos,
   setPhotos,
@@ -384,6 +394,9 @@ function PhotoGrid({
   uploadProgress,
   isDraggingOver,
   onFileDrop,
+  selectMode,
+  selectedIndices,
+  onToggleSelect,
 }: {
   photos: Array<{ url: string; caption?: string; sortOrder: number }>;
   setPhotos: React.Dispatch<React.SetStateAction<Array<{ url: string; caption?: string; sortOrder: number }>>>;
@@ -401,58 +414,89 @@ function PhotoGrid({
   uploadProgress: number;
   isDraggingOver: boolean;
   onFileDrop: (files: File[]) => Promise<void>;
+  selectMode: boolean;
+  selectedIndices: Set<number>;
+  onToggleSelect: (idx: number) => void;
 }) {
   return (
     <>
       <div
         ref={photoListRef}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        onTouchMove={selectMode ? undefined : onTouchMove}
+        onTouchEnd={selectMode ? undefined : onTouchEnd}
         className="grid grid-cols-3 gap-1 p-1"
       >
-        {photos.map((photo, i) => (
-          <div
-            key={`photo-${i}`}
-            data-photo-idx={i}
-            draggable
-            onDragStart={(e) => onDragStart(e, i)}
-            onDragOver={(e) => onDragOver(e, i)}
-            onDrop={(e) => onDrop(e, i)}
-            onDragEnd={onDragEnd}
-            className={cn(
-              "relative aspect-square bg-muted rounded-lg overflow-hidden group cursor-grab active:cursor-grabbing transition-all",
-              photoDragIdx === i && "opacity-40 scale-95 ring-2 ring-primary/40",
-              photoOverIdx === i && photoDragIdx !== i && "ring-2 ring-primary/60 scale-105",
-            )}
-          >
-            {photo.url ? (
-              <img src={photo.url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Upload className="h-6 w-6 text-muted-foreground" />
-              </div>
-            )}
-            {/* Grip handle overlay */}
+        {photos.map((photo, i) => {
+          const isSelected = selectedIndices.has(i);
+          return (
             <div
-              className="absolute top-0 left-0 right-0 h-7 bg-gradient-to-b from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-center pt-1"
-              style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties}
-              onTouchStart={(e) => onGripTouchStart(i, e)}
+              key={`photo-${i}`}
+              data-photo-idx={i}
+              draggable={!selectMode}
+              onDragStart={selectMode ? undefined : (e) => onDragStart(e, i)}
+              onDragOver={selectMode ? undefined : (e) => onDragOver(e, i)}
+              onDrop={selectMode ? undefined : (e) => onDrop(e, i)}
+              onDragEnd={selectMode ? undefined : onDragEnd}
+              onClick={selectMode ? () => onToggleSelect(i) : undefined}
+              className={cn(
+                "relative aspect-square bg-muted rounded-lg overflow-hidden group transition-all",
+                selectMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
+                !selectMode && photoDragIdx === i && "opacity-40 scale-95 ring-2 ring-primary/40",
+                !selectMode && photoOverIdx === i && photoDragIdx !== i && "ring-2 ring-primary/60 scale-105",
+                selectMode && isSelected && "ring-3 ring-blue-500 ring-offset-1",
+              )}
             >
-              <GripVertical className="h-4 w-4 text-white drop-shadow-sm" />
+              {photo.url ? (
+                <img src={photo.url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-muted-foreground" />
+                </div>
+              )}
+              {/* Select mode: checkbox overlay */}
+              {selectMode && (
+                <div className="absolute top-1 left-1 w-6 h-6 rounded-full flex items-center justify-center">
+                  {isSelected ? (
+                    <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
+                      <Check className="h-3.5 w-3.5 text-white" />
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-black/40 border-2 border-white/80" />
+                  )}
+                </div>
+              )}
+              {/* Grip handle overlay (hidden in select mode) */}
+              {!selectMode && (
+                <div
+                  className="absolute top-0 left-0 right-0 h-7 bg-gradient-to-b from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-start justify-center pt-1"
+                  style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" } as React.CSSProperties}
+                  onTouchStart={(e) => onGripTouchStart(i, e)}
+                >
+                  <GripVertical className="h-4 w-4 text-white drop-shadow-sm" />
+                </div>
+              )}
+              {/* Delete button overlay (hidden in select mode) */}
+              {!selectMode && (
+                <button
+                  className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); setPhotos(photos.filter((_, j) => j !== i)); }}
+                >
+                  <X className="h-3.5 w-3.5 text-white" />
+                </button>
+              )}
+              {/* Index badge (hidden in select mode) */}
+              {!selectMode && (
+                <div className="absolute bottom-1 left-1 w-5 h-5 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[10px] font-bold text-white">{i + 1}</span>
+                </div>
+              )}
+              {/* Dimming overlay for selected photos */}
+              {selectMode && isSelected && (
+                <div className="absolute inset-0 bg-blue-500/15 pointer-events-none" />
+              )}
             </div>
-            {/* Delete button overlay */}
-            <button
-              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={(e) => { e.stopPropagation(); setPhotos(photos.filter((_, j) => j !== i)); }}
-            >
-              <X className="h-3.5 w-3.5 text-white" />
-            </button>
-            {/* Index badge */}
-            <div className="absolute bottom-1 left-1 w-5 h-5 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <span className="text-[10px] font-bold text-white">{i + 1}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       {uploadingPhotos ? (
         <div className="p-3">
@@ -481,6 +525,91 @@ function PhotoGrid({
         </label>
       )}
     </>
+  );
+}
+
+/** Modal dialog for picking a destination album to move photos to */
+function MovePhotosDialog({
+  open,
+  onOpenChange,
+  allNodes,
+  currentNodeId,
+  selectedCount,
+  onMove,
+  moving,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  allNodes: MenuNodeWithMetadata[];
+  currentNodeId: string;
+  selectedCount: number;
+  onMove: (destinationNodeId: string) => void;
+  moving: boolean;
+}) {
+  // Find all nodes that can hold photos: photo_album, folder, settings
+  const destinations = allNodes.filter(
+    (n) =>
+      n.id !== currentNodeId &&
+      (n.type === "photo_album" || n.type === "folder" || n.type === "settings")
+  );
+
+  // Build parent title lookup
+  const nodeMap = new Map(allNodes.map((n) => [n.id, n]));
+  const getParentTitle = (n: MenuNodeWithMetadata) => {
+    if (!n.parentId) return null;
+    return nodeMap.get(n.parentId)?.title || null;
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Move {selectedCount} photo{selectedCount !== 1 ? "s" : ""} to...</DialogTitle>
+          <DialogDescription>
+            Choose a destination album or folder.
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+          <div className="space-y-1 py-2">
+            {destinations.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No other albums or folders available.</p>
+            ) : (
+              destinations.map((dest) => {
+                const parentTitle = getParentTitle(dest);
+                const photoCount = (dest.metadata?.photos as any)?.length || 0;
+                const Icon = CHILD_TYPE_ICONS[dest.type] || Image;
+                const iconStyle = CHILD_ICON_STYLE[dest.type] || "bg-pink-100 text-pink-600";
+                return (
+                  <button
+                    key={dest.id}
+                    disabled={moving}
+                    onClick={() => onMove(dest.id)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/80 transition-colors text-left disabled:opacity-50"
+                  >
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", iconStyle)}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {parentTitle && (
+                          <span className="text-muted-foreground">{parentTitle} &rsaquo; </span>
+                        )}
+                        {dest.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {TYPE_LABELS[dest.type] || dest.type}
+                        {photoCount > 0 && ` · ${photoCount} photo${photoCount !== 1 ? "s" : ""}`}
+                      </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/30 flex-shrink-0" />
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -537,6 +666,12 @@ export function NodeEditor({
   const [photoOverIdx, setPhotoOverIdx] = useState<number | null>(null);
   const photoTouchRef = useRef<{ idx: number; startY: number; moved: boolean } | null>(null);
   const photoListRef = useRef<HTMLDivElement>(null);
+
+  /* ── Photo select & move state ── */
+  const [photoSelectMode, setPhotoSelectMode] = useState(false);
+  const [selectedPhotoIndices, setSelectedPhotoIndices] = useState<Set<number>>(new Set());
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [movingPhotos, setMovingPhotos] = useState(false);
 
   const reorderPhotos = (from: number, to: number) => {
     if (from === to) return;
@@ -596,6 +731,82 @@ export function NodeEditor({
     photoTouchRef.current = null;
     setPhotoDragIdx(null);
     setPhotoOverIdx(null);
+  };
+
+  const togglePhotoSelect = (idx: number) => {
+    setSelectedPhotoIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedPhotoIndices(new Set(photos.map((_, i) => i)));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedPhotoIndices(new Set());
+  };
+
+  const exitSelectMode = () => {
+    setPhotoSelectMode(false);
+    setSelectedPhotoIndices(new Set());
+  };
+
+  const handleMovePhotos = async (destinationNodeId: string) => {
+    const selected = Array.from(selectedPhotoIndices).sort((a, b) => a - b);
+    if (selected.length === 0) return;
+
+    setMovingPhotos(true);
+    try {
+      // Fetch the destination node's current state
+      const destRes = await apiRequest("GET", `/api/nodes/${destinationNodeId}`);
+      const destNode: MenuNodeWithMetadata = await destRes.json();
+      const destPhotos: Array<{ url: string; caption?: string; sortOrder: number }> =
+        (destNode.metadata?.photos as any) || [];
+
+      // Gather selected photos
+      const photosToMove = selected.map((i) => photos[i]);
+
+      // Append to destination with correct sortOrder
+      const newDestPhotos = [
+        ...destPhotos,
+        ...photosToMove.map((p, i) => ({ ...p, sortOrder: destPhotos.length + i })),
+      ];
+
+      // Save destination node
+      await apiRequest("PATCH", `/api/nodes/${destinationNodeId}`, {
+        metadata: { photos: newDestPhotos.length > 0 ? newDestPhotos : null },
+      });
+
+      // Remove selected photos from current node
+      const remaining = photos.filter((_, i) => !selectedPhotoIndices.has(i));
+      remaining.forEach((p, i) => (p.sortOrder = i));
+      setPhotos(remaining);
+
+      // Save current node
+      await apiRequest("PATCH", `/api/nodes/${node.id}`, {
+        title,
+        metadata: buildMetadata({ photos: remaining.length > 0 ? remaining : null }),
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+
+      const destTitle = destNode.title;
+      toast({
+        title: "Photos moved",
+        description: `Moved ${selected.length} photo${selected.length !== 1 ? "s" : ""} to "${destTitle}".`,
+      });
+
+      setMoveDialogOpen(false);
+      exitSelectMode();
+    } catch (err: any) {
+      toast({ title: "Move failed", description: err.message, variant: "destructive" });
+    } finally {
+      setMovingPhotos(false);
+    }
   };
 
   // Prevent browser from opening dragged files as a new tab,
@@ -684,6 +895,8 @@ export function NodeEditor({
     setTranscription(node.metadata?.transcription || null);
     setTranscribing(false);
     setTranscriptionOpen(false);
+    setPhotoSelectMode(false);
+    setSelectedPhotoIndices(new Set());
   }
 
   /* ── Build metadata payload (with optional overrides) ── */
@@ -1350,7 +1563,31 @@ export function NodeEditor({
               {node.type === "settings" && (
                 <>
                   <div>
-                    <SectionHeader>Photos</SectionHeader>
+                    <div className="flex items-center justify-between mb-3">
+                      <SectionHeader>Photos</SectionHeader>
+                      {photos.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant={photoSelectMode ? "default" : "outline"}
+                          className="h-7 text-xs gap-1.5"
+                          onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
+                        >
+                          {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
+                        </Button>
+                      )}
+                    </div>
+                    {photoSelectMode && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
+                        <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
+                        {selectedPhotoIndices.size > 0 && (
+                          <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
+                            <ArrowRightLeft className="h-3 w-3" /> Move to Album
+                          </Button>
+                        )}
+                      </div>
+                    )}
                     <FieldGroup className="p-0 overflow-hidden space-y-0">
                       <PhotoGrid
                         photos={photos}
@@ -1369,6 +1606,9 @@ export function NodeEditor({
                         uploadProgress={uploadProgress}
                         isDraggingOver={isDraggingOver}
                         onFileDrop={handleFileDrop}
+                        selectMode={photoSelectMode}
+                        selectedIndices={selectedPhotoIndices}
+                        onToggleSelect={togglePhotoSelect}
                       />
                     </FieldGroup>
                   </div>
@@ -1407,7 +1647,31 @@ export function NodeEditor({
                     </div>
                   </div>
                   <div>
-                    <SectionHeader>Photos</SectionHeader>
+                    <div className="flex items-center justify-between mb-3">
+                      <SectionHeader>Photos</SectionHeader>
+                      {photos.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant={photoSelectMode ? "default" : "outline"}
+                          className="h-7 text-xs gap-1.5"
+                          onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
+                        >
+                          {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
+                        </Button>
+                      )}
+                    </div>
+                    {photoSelectMode && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
+                        <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
+                        {selectedPhotoIndices.size > 0 && (
+                          <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
+                            <ArrowRightLeft className="h-3 w-3" /> Move to Album
+                          </Button>
+                        )}
+                      </div>
+                    )}
                     <FieldGroup className="p-0 overflow-hidden space-y-0">
                       <PhotoGrid
                         photos={photos}
@@ -1426,6 +1690,9 @@ export function NodeEditor({
                         uploadProgress={uploadProgress}
                         isDraggingOver={isDraggingOver}
                         onFileDrop={handleFileDrop}
+                        selectMode={photoSelectMode}
+                        selectedIndices={selectedPhotoIndices}
+                        onToggleSelect={togglePhotoSelect}
                       />
                     </FieldGroup>
                   </div>
@@ -1443,7 +1710,31 @@ export function NodeEditor({
               {node.type === "photo_album" && (
                 <>
                   <div>
-                    <SectionHeader>Photos</SectionHeader>
+                    <div className="flex items-center justify-between mb-3">
+                      <SectionHeader>Photos</SectionHeader>
+                      {photos.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant={photoSelectMode ? "default" : "outline"}
+                          className="h-7 text-xs gap-1.5"
+                          onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
+                        >
+                          {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
+                        </Button>
+                      )}
+                    </div>
+                    {photoSelectMode && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
+                        <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
+                        {selectedPhotoIndices.size > 0 && (
+                          <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
+                            <ArrowRightLeft className="h-3 w-3" /> Move to Album
+                          </Button>
+                        )}
+                      </div>
+                    )}
                     <FieldGroup className="p-0 overflow-hidden space-y-0">
                       <PhotoGrid
                         photos={photos}
@@ -1462,6 +1753,9 @@ export function NodeEditor({
                         uploadProgress={uploadProgress}
                         isDraggingOver={isDraggingOver}
                         onFileDrop={handleFileDrop}
+                        selectMode={photoSelectMode}
+                        selectedIndices={selectedPhotoIndices}
+                        onToggleSelect={togglePhotoSelect}
                       />
                     </FieldGroup>
                   </div>
@@ -1557,6 +1851,17 @@ export function NodeEditor({
             </>
           )}
         </div>
+
+        {/* Move photos dialog — rendered inside ScrollArea's tree but uses a portal */}
+        <MovePhotosDialog
+          open={moveDialogOpen}
+          onOpenChange={setMoveDialogOpen}
+          allNodes={allNodes}
+          currentNodeId={node.id}
+          selectedCount={selectedPhotoIndices.size}
+          onMove={handleMovePhotos}
+          moving={movingPhotos}
+        />
       </ScrollArea>
 
       {/* Action bar */}
