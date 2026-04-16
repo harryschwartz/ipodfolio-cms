@@ -23,7 +23,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import type { MenuNodeWithMetadata } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AudioBadge } from "@/components/audio-badge";
-import { isHiddenMusicChild } from "@/components/music-library-view";
+import { isHiddenMusicChild, MUSIC_FOLDER_ID } from "@/components/music-library-view";
 
 const TYPE_ICONS: Record<string, any> = {
   folder: Folder,
@@ -355,28 +355,132 @@ function TreeNode({
 
       {isExpanded && children.length > 0 && (
         <div>
-          {children.map((child) => (
-            <TreeNode
-              key={child.id}
-              node={child}
-              nodes={nodes}
-              depth={depth + 1}
-              selectedNodeId={selectedNodeId}
-              selectedIds={selectedIds}
-              onSelectNode={onSelectNode}
-              onAddNode={onAddNode}
-              expandedIds={expandedIds}
-              toggleExpanded={toggleExpanded}
-              onDragStart={onDragStart}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              dragOverId={dragOverId}
-              dragOverPosition={dragOverPosition}
-              dropFolderId={dropFolderId}
-              onTogglePublish={onTogglePublish}
-            />
-          ))}
+          {node.id === MUSIC_FOLDER_ID ? (
+            <>
+              {/* Playlists section */}
+              {children.filter((c) => c.type === "playlist").length > 0 && (
+                <>
+                  <div
+                    className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 py-1"
+                    style={{ paddingLeft: `${(depth + 1) * 16 + 10}px` }}
+                  >
+                    Playlists
+                  </div>
+                  {children.filter((c) => c.type === "playlist").map((child) => (
+                    <TreeNode
+                      key={child.id}
+                      node={child}
+                      nodes={nodes}
+                      depth={depth + 1}
+                      selectedNodeId={selectedNodeId}
+                      selectedIds={selectedIds}
+                      onSelectNode={onSelectNode}
+                      onAddNode={onAddNode}
+                      expandedIds={expandedIds}
+                      toggleExpanded={toggleExpanded}
+                      onDragStart={onDragStart}
+                      onDragOver={onDragOver}
+                      onDragLeave={onDragLeave}
+                      onDrop={onDrop}
+                      dragOverId={dragOverId}
+                      dragOverPosition={dragOverPosition}
+                      dropFolderId={dropFolderId}
+                      onTogglePublish={onTogglePublish}
+                    />
+                  ))}
+                </>
+              )}
+              {/* Divider */}
+              {children.filter((c) => c.type === "playlist").length > 0 &&
+                children.filter((c) => c.type === "song").length > 0 && (
+                <div
+                  className="my-1"
+                  style={{ paddingLeft: `${(depth + 1) * 16 + 10}px`, paddingRight: "12px" }}
+                >
+                  <div className="border-t border-border/50" />
+                </div>
+              )}
+              {/* Library section */}
+              {children.filter((c) => c.type === "song").length > 0 && (
+                <>
+                  <div
+                    className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 py-1"
+                    style={{ paddingLeft: `${(depth + 1) * 16 + 10}px` }}
+                  >
+                    Library
+                  </div>
+                  {children.filter((c) => c.type === "song").map((child) => (
+                    <TreeNode
+                      key={child.id}
+                      node={child}
+                      nodes={nodes}
+                      depth={depth + 1}
+                      selectedNodeId={selectedNodeId}
+                      selectedIds={selectedIds}
+                      onSelectNode={onSelectNode}
+                      onAddNode={onAddNode}
+                      expandedIds={expandedIds}
+                      toggleExpanded={toggleExpanded}
+                      onDragStart={onDragStart}
+                      onDragOver={onDragOver}
+                      onDragLeave={onDragLeave}
+                      onDrop={onDrop}
+                      dragOverId={dragOverId}
+                      dragOverPosition={dragOverPosition}
+                      dropFolderId={dropFolderId}
+                      onTogglePublish={onTogglePublish}
+                    />
+                  ))}
+                </>
+              )}
+              {/* Other types */}
+              {children.filter((c) => c.type !== "playlist" && c.type !== "song").map((child) => (
+                <TreeNode
+                  key={child.id}
+                  node={child}
+                  nodes={nodes}
+                  depth={depth + 1}
+                  selectedNodeId={selectedNodeId}
+                  selectedIds={selectedIds}
+                  onSelectNode={onSelectNode}
+                  onAddNode={onAddNode}
+                  expandedIds={expandedIds}
+                  toggleExpanded={toggleExpanded}
+                  onDragStart={onDragStart}
+                  onDragOver={onDragOver}
+                  onDragLeave={onDragLeave}
+                  onDrop={onDrop}
+                  dragOverId={dragOverId}
+                  dragOverPosition={dragOverPosition}
+                  dropFolderId={dropFolderId}
+                  onTogglePublish={onTogglePublish}
+                />
+              ))}
+            </>
+          ) : (
+            children.map((child) => (
+              <TreeNode
+                key={child.id}
+                node={child}
+                nodes={nodes}
+                depth={depth + 1}
+                selectedNodeId={selectedNodeId}
+                selectedIds={selectedIds}
+                onSelectNode={onSelectNode}
+                onAddNode={onAddNode}
+                expandedIds={expandedIds}
+                toggleExpanded={toggleExpanded}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                dragOverId={dragOverId}
+                dragOverPosition={dragOverPosition}
+                dropFolderId={dropFolderId}
+                onTogglePublish={onTogglePublish}
+              />
+            ))
+          )}
         </div>
       )}
     </div>

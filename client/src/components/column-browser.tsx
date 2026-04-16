@@ -20,8 +20,9 @@ import type { MenuNodeWithMetadata } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { NodeEditor } from "@/components/node-editor";
 import { AudioBadge } from "@/components/audio-badge";
-import { ITunesSearchDialog } from "@/components/itunes-search-dialog";
-import { isHiddenMusicChild } from "@/components/music-library-view";
+import { ITunesSearchDialog, getHighResArt } from "@/components/itunes-search-dialog";
+import type { ITunesTrack } from "@/components/itunes-search-dialog";
+import { isHiddenMusicChild, MUSIC_FOLDER_ID } from "@/components/music-library-view";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
 const TYPE_ICONS: Record<string, any> = {
@@ -252,6 +253,54 @@ function BrowserColumn({
 
   const [itunesOpen, setItunesOpen] = useState(false);
 
+  // Check if this column is a playlist under the Music folder
+  const parentNode = parentId ? nodes.find((n) => n.id === parentId) : null;
+  const isPlaylistUnderMusic = parentNode?.type === "playlist" && parentNode?.parentId === MUSIC_FOLDER_ID;
+
+  // When adding iTunes tracks to a playlist under Music, also create library copies
+  const handlePlaylistAddFromItunes = useCallback(async (tracks: ITunesTrack[]) => {
+    if (!parentId) return;
+    const librarySongs = nodes.filter((n) => n.parentId === MUSIC_FOLDER_ID && n.type === "song");
+    let librarySortOrder = librarySongs.length;
+    let playlistSortOrder = items.length;
+
+    for (const track of tracks) {
+      // 1. Create song in the library
+      const libRes = await apiRequest("POST", "/api/nodes", {
+        parentId: MUSIC_FOLDER_ID,
+        type: "song",
+        title: track.trackName,
+        sortOrder: librarySortOrder++,
+        status: "published",
+        metadata: {
+          audioUrl: track.previewUrl || null,
+          coverImageUrl: getHighResArt(track.artworkUrl100) || null,
+          artistName: track.artistName || null,
+          albumName: track.collectionName || null,
+          trackNumber: track.trackNumber || null,
+        },
+      });
+      const librarySong = await libRes.json();
+
+      // 2. Create playlist reference pointing to the library song
+      await apiRequest("POST", "/api/nodes", {
+        parentId,
+        type: "song",
+        title: track.trackName,
+        sortOrder: playlistSortOrder++,
+        status: "published",
+        metadata: {
+          audioUrl: track.previewUrl || null,
+          coverImageUrl: getHighResArt(track.artworkUrl100) || null,
+          artistName: track.artistName || null,
+          albumName: track.collectionName || null,
+          trackNumber: track.trackNumber || null,
+          sourceNodeId: librarySong.id,
+        },
+      });
+    }
+  }, [parentId, nodes, items.length]);
+
   const handleBackgroundDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -298,8 +347,11 @@ function BrowserColumn({
         <ITunesSearchDialog
           open={itunesOpen}
           onOpenChange={setItunesOpen}
-          parentId={parentId}
-          existingChildCount={items.length}
+          parentId={isPlaylistUnderMusic ? MUSIC_FOLDER_ID : parentId}
+          existingChildCount={isPlaylistUnderMusic
+            ? nodes.filter((n) => n.parentId === MUSIC_FOLDER_ID && n.type === "song").length
+            : items.length}
+          onAddTracks={isPlaylistUnderMusic ? handlePlaylistAddFromItunes : undefined}
         />
       )}
 
@@ -309,6 +361,88 @@ function BrowserColumn({
           <div className="px-3 py-4 text-xs text-muted-foreground/60 text-center">
             Empty
           </div>
+        ) : parentId === MUSIC_FOLDER_ID ? (
+          <>
+            {/* Playlists section */}
+            {items.filter((n) => n.type === "playlist").length > 0 && (
+              <>
+                <div className="px-3 pt-1.5 pb-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">
+                  Playlists
+                </div>
+                {items.filter((n) => n.type === "playlist").map((node) => (
+                  <ColumnItem
+                    key={node.id}
+                    node={node}
+                    nodes={nodes}
+                    isSelected={node.id === selectedNodeId}
+                    isMultiSelected={selectedIds.has(node.id)}
+                    isInPath={columnPath.includes(node.id)}
+                    isDragAbove={node.id === dragState.dragOverId && dragState.dragOverPosition === "above"}
+                    isDragBelow={node.id === dragState.dragOverId && dragState.dragOverPosition === "below"}
+                    isFolderDropTarget={node.id === dragState.dropFolderId}
+                    onClick={(e) => onClickNode(node, e)}
+                    onLongPress={() => onLongPressNode(node)}
+                    onDragStart={(e) => onDragStart(e, node.id)}
+                    onDragOver={(e) => onDragOver(e, node.id)}
+                    onDragLeave={onDragLeave}
+                    onDrop={(e) => onDrop(e, node.id)}
+                  />
+                ))}
+              </>
+            )}
+            {/* Divider between sections */}
+            {items.filter((n) => n.type === "playlist").length > 0 &&
+              items.filter((n) => n.type === "song").length > 0 && (
+              <div className="mx-3 my-1.5 border-t border-border/50" />
+            )}
+            {/* Library section */}
+            {items.filter((n) => n.type === "song").length > 0 && (
+              <>
+                <div className="px-3 pt-1.5 pb-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50">
+                  Library
+                </div>
+                {items.filter((n) => n.type === "song").map((node) => (
+                  <ColumnItem
+                    key={node.id}
+                    node={node}
+                    nodes={nodes}
+                    isSelected={node.id === selectedNodeId}
+                    isMultiSelected={selectedIds.has(node.id)}
+                    isInPath={columnPath.includes(node.id)}
+                    isDragAbove={node.id === dragState.dragOverId && dragState.dragOverPosition === "above"}
+                    isDragBelow={node.id === dragState.dragOverId && dragState.dragOverPosition === "below"}
+                    isFolderDropTarget={node.id === dragState.dropFolderId}
+                    onClick={(e) => onClickNode(node, e)}
+                    onLongPress={() => onLongPressNode(node)}
+                    onDragStart={(e) => onDragStart(e, node.id)}
+                    onDragOver={(e) => onDragOver(e, node.id)}
+                    onDragLeave={onDragLeave}
+                    onDrop={(e) => onDrop(e, node.id)}
+                  />
+                ))}
+              </>
+            )}
+            {/* Other types (albums, etc.) */}
+            {items.filter((n) => n.type !== "playlist" && n.type !== "song").map((node) => (
+              <ColumnItem
+                key={node.id}
+                node={node}
+                nodes={nodes}
+                isSelected={node.id === selectedNodeId}
+                isMultiSelected={selectedIds.has(node.id)}
+                isInPath={columnPath.includes(node.id)}
+                isDragAbove={node.id === dragState.dragOverId && dragState.dragOverPosition === "above"}
+                isDragBelow={node.id === dragState.dragOverId && dragState.dragOverPosition === "below"}
+                isFolderDropTarget={node.id === dragState.dropFolderId}
+                onClick={(e) => onClickNode(node, e)}
+                onLongPress={() => onLongPressNode(node)}
+                onDragStart={(e) => onDragStart(e, node.id)}
+                onDragOver={(e) => onDragOver(e, node.id)}
+                onDragLeave={onDragLeave}
+                onDrop={(e) => onDrop(e, node.id)}
+              />
+            ))}
+          </>
         ) : (
           items.map((node) => (
             <ColumnItem
