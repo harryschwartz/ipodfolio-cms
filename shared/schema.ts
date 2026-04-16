@@ -35,6 +35,12 @@ export const nodeMetadata = pgTable("node_metadata", {
   links: jsonb("links").$type<Array<{ label: string; url: string }>>(),
   songIds: jsonb("song_ids").$type<string[]>(),
   coverImages: jsonb("cover_images").$type<string[]>(),
+  transcription: jsonb("transcription").$type<{
+    text: string;
+    words: Array<{ word: string; start: number; end: number }>;
+    segments: Array<{ start: number; end: number; text: string }>;
+    duration: number;
+  }>(),
 });
 
 export const insertMenuNodeSchema = createInsertSchema(menuNodes).omit({

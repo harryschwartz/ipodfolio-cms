@@ -44,6 +44,8 @@ import {
   Layers,
   Scissors,
   Pencil,
+  ChevronDown,
+  Loader2,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -407,6 +409,9 @@ export function NodeEditor({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showTrimmer, setShowTrimmer] = useState(false);
   const [editingCover, setEditingCover] = useState(false);
+  const [transcription, setTranscription] = useState<any>(node.metadata?.transcription || null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [transcriptionOpen, setTranscriptionOpen] = useState(false);
   const dragCounter = useRef(0);
 
   /* ── Photo reorder state ── */
@@ -558,6 +563,9 @@ export function NodeEditor({
     setPhotos((node.metadata?.photos as any) || []);
     setShowTrimmer(false);
     setEditingCover(false);
+    setTranscription(node.metadata?.transcription || null);
+    setTranscribing(false);
+    setTranscriptionOpen(false);
   }
 
   /* ── Build metadata payload (with optional overrides) ── */
@@ -579,6 +587,7 @@ export function NodeEditor({
     duration: duration || null,
     links: links.length > 0 ? links : null,
     photos: photos.length > 0 ? photos : null,
+    transcription: transcription || null,
     ...overrides,
   });
 
@@ -752,11 +761,86 @@ export function NodeEditor({
       setAudioUrl(newUrl);
       await autoSave({ audioUrl: newUrl });
       toast({ title: "Audio uploaded", description: "Audio file saved successfully." });
+      // Kick off transcription in the background (don't await — non-blocking)
+      transcribeAudio(newUrl);
     } catch (err: any) {
       toast({ title: "Audio upload failed", description: err.message, variant: "destructive" });
     } finally {
       setUploadingAudio(false);
       setUploadProgress(0);
+    }
+  };
+
+  /* ── Transcribe audio in the background ── */
+  const transcribeAudio = async (audioFileUrl: string) => {
+    const SUPABASE_URL = "https://xtjjavrixvnwoulgebqp.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh0amphdnJpeHZud291bGdlYnFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NjgxNjIsImV4cCI6MjA4OTU0NDE2Mn0.aSL3bi4__sS1OaeF2_MkTMrOGfHmnHBKxhKP8zd0qAQ";
+
+    setTranscribing(true);
+    try {
+      // 1. Call the transcription Edge Function
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/transcribe`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ audio_url: audioFileUrl }),
+      });
+      if (!res.ok) throw new Error(`Transcription failed: ${res.statusText}`);
+      const data = await res.json();
+
+      // 2. Store transcription on the node
+      setTranscription(data);
+      await autoSave({ transcription: data });
+
+      // 3. Find or create the "i prefer to read 🤓" folder as sibling of this song
+      const parentId = node.parentId;
+      const FOLDER_TITLE = "i prefer to read 🤓";
+
+      // Fetch current siblings to check if folder already exists
+      const allRes = await apiRequest("GET", "/api/nodes");
+      const allCurrentNodes: MenuNodeWithMetadata[] = await allRes.json();
+      let readFolder = allCurrentNodes.find(
+        (n) => n.parentId === parentId && n.type === "folder" && n.title === FOLDER_TITLE
+      );
+
+      if (!readFolder) {
+        // Create the folder
+        const siblings = allCurrentNodes.filter((n) => n.parentId === parentId);
+        const maxSort = siblings.reduce((max, n) => Math.max(max, n.sortOrder), -1);
+        const createRes = await apiRequest("POST", "/api/nodes", {
+          parentId,
+          type: "folder",
+          title: FOLDER_TITLE,
+          sortOrder: maxSort + 1,
+          status: "published",
+          metadata: {},
+        });
+        readFolder = await createRes.json();
+      }
+
+      // 4. Create a text node inside the folder with the transcription text
+      if (readFolder) {
+        const folderChildren = allCurrentNodes.filter((n) => n.parentId === readFolder!.id);
+        const maxChildSort = folderChildren.reduce((max, n) => Math.max(max, n.sortOrder), -1);
+        await apiRequest("POST", "/api/nodes", {
+          parentId: readFolder.id,
+          type: "text",
+          title: node.title,
+          sortOrder: maxChildSort + 1,
+          status: "published",
+          metadata: { bodyText: data.text },
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/nodes"] });
+      toast({ title: "Transcription complete", description: "Audio has been transcribed and a text version was created." });
+    } catch (err: any) {
+      console.error("Transcription error:", err);
+      toast({ title: "Transcription failed", description: err.message, variant: "destructive" });
+    } finally {
+      setTranscribing(false);
     }
   };
 
@@ -996,6 +1080,45 @@ export function NodeEditor({
                       )}
                     </FieldGroup>
                   </div>
+                  {/* ── Transcription ── */}
+                  {(transcription || transcribing) && (
+                    <div>
+                      <SectionHeader>Transcription</SectionHeader>
+                      <FieldGroup>
+                        {transcribing ? (
+                          <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Transcribing...
+                          </div>
+                        ) : transcription ? (
+                          <div className="space-y-3">
+                            <button
+                              type="button"
+                              onClick={() => setTranscriptionOpen(!transcriptionOpen)}
+                              className="flex items-center gap-2 text-sm font-medium text-foreground/75 hover:text-foreground transition-colors w-full text-left"
+                            >
+                              <ChevronDown className={cn("h-4 w-4 transition-transform", transcriptionOpen && "rotate-180")} />
+                              {transcriptionOpen ? "Hide transcription" : "Show transcription"}
+                              {transcription.duration && (
+                                <span className="text-xs text-muted-foreground ml-auto">
+                                  {Math.floor(transcription.duration / 60)}:{String(Math.floor(transcription.duration % 60)).padStart(2, "0")}
+                                </span>
+                              )}
+                            </button>
+                            {transcriptionOpen && (
+                              <Textarea
+                                value={transcription.text || ""}
+                                onChange={(e) => setTranscription({ ...transcription, text: e.target.value })}
+                                rows={8}
+                                placeholder="Transcription text..."
+                                className="resize-y text-sm leading-relaxed"
+                              />
+                            )}
+                          </div>
+                        ) : null}
+                      </FieldGroup>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -1382,9 +1505,6 @@ export function NodeEditor({
     </div>
   );
 }
-
-// Need Settings icon inside the read-only section
-import { Settings } from "lucide-react";
 
 const PRESET_COLORS = [
   "#6366f1", "#8b5cf6", "#ec4899", "#ef4444",

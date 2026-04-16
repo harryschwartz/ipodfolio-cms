@@ -56,6 +56,7 @@ export async function registerRoutes(
               links: n.metadata.links || undefined,
               songIds: n.metadata.songIds || undefined,
               coverImages: n.metadata.coverImages || undefined,
+              transcription: n.metadata.transcription || undefined,
             }
           : {},
       }));
@@ -107,6 +108,7 @@ export async function registerRoutes(
             links: n.metadata.links || undefined,
             songIds: n.metadata.songIds || undefined,
             coverImages: n.metadata.coverImages || undefined,
+            transcription: n.metadata.transcription || undefined,
           }
         : {},
     })));

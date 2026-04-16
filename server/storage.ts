@@ -67,8 +67,14 @@ export class DatabaseStorage implements IStorage {
         photos JSONB,
         links JSONB,
         song_ids JSONB,
-        cover_images JSONB
+        cover_images JSONB,
+        transcription JSONB
       );
+    `);
+
+    // Add transcription column if missing (migration for existing databases)
+    await db.execute(`
+      ALTER TABLE node_metadata ADD COLUMN IF NOT EXISTS transcription JSONB;
     `);
 
     // Seed if empty
@@ -384,6 +390,7 @@ export class DatabaseStorage implements IStorage {
         links: seed.metadata.links || null,
         songIds: seed.metadata.songIds || null,
         coverImages: seed.metadata.coverImages || null,
+        transcription: seed.metadata.transcription || null,
       });
     }
   }
@@ -451,6 +458,7 @@ export class DatabaseStorage implements IStorage {
       links: metadataData?.links || null,
       songIds: metadataData?.songIds || null,
       coverImages: metadataData?.coverImages || null,
+      transcription: metadataData?.transcription || null,
     }).returning();
 
     return { ...node, metadata: meta };
@@ -827,6 +835,10 @@ export class MemStorage implements IStorage {
         id: metaId,
         nodeId: seed.id,
         coverImageUrl: seed.metadata.coverImageUrl || null,
+        coverImagePosition: seed.metadata.coverImagePosition || null,
+        coverImageZoom: seed.metadata.coverImageZoom || null,
+        coverEmoji: seed.metadata.coverEmoji || null,
+        coverColor: seed.metadata.coverColor || null,
         artistName: seed.metadata.artistName || null,
         albumName: seed.metadata.albumName || null,
         audioUrl: seed.metadata.audioUrl || null,
@@ -836,10 +848,12 @@ export class MemStorage implements IStorage {
         duration: seed.metadata.duration || null,
         bodyText: seed.metadata.bodyText || null,
         previewImage: seed.metadata.previewImage || null,
+        splitScreen: seed.metadata.splitScreen ?? null,
         photos: seed.metadata.photos || null,
         links: seed.metadata.links || null,
         songIds: seed.metadata.songIds || null,
         coverImages: seed.metadata.coverImages || null,
+        transcription: seed.metadata.transcription || null,
       };
       this.metadata.set(seed.id, meta);
     }
@@ -892,6 +906,10 @@ export class MemStorage implements IStorage {
       id: metaId,
       nodeId: id,
       coverImageUrl: metadataData?.coverImageUrl || null,
+      coverImagePosition: metadataData?.coverImagePosition || null,
+      coverImageZoom: metadataData?.coverImageZoom || null,
+      coverEmoji: metadataData?.coverEmoji || null,
+      coverColor: metadataData?.coverColor || null,
       artistName: metadataData?.artistName || null,
       albumName: metadataData?.albumName || null,
       audioUrl: metadataData?.audioUrl || null,
@@ -901,10 +919,12 @@ export class MemStorage implements IStorage {
       duration: metadataData?.duration || null,
       bodyText: metadataData?.bodyText || null,
       previewImage: metadataData?.previewImage || null,
+      splitScreen: metadataData?.splitScreen ?? null,
       photos: metadataData?.photos || null,
       links: metadataData?.links || null,
       songIds: metadataData?.songIds || null,
       coverImages: metadataData?.coverImages || null,
+      transcription: metadataData?.transcription || null,
     };
     this.metadata.set(id, meta);
 
