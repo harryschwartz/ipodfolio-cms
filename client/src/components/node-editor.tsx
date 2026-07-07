@@ -391,6 +391,32 @@ function ChildrenList({
   );
 }
 
+/** Build an off-screen drag image for a multi-photo group: stacked thumbnails with a count badge. */
+function createGroupDragGhost(count: number, thumbUrl?: string): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  const el = document.createElement("div");
+  el.style.cssText = "position:absolute;top:-1000px;left:-1000px;width:72px;height:72px;pointer-events:none;";
+  if (count > 1) {
+    for (const rot of ["-6deg", "4deg"]) {
+      const layer = document.createElement("div");
+      layer.style.cssText = `position:absolute;inset:0;transform:rotate(${rot});background:#d1d5db;border-radius:10px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.2);`;
+      el.appendChild(layer);
+    }
+  }
+  const top = document.createElement("div");
+  top.style.cssText = "position:absolute;inset:0;border-radius:10px;border:2px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,0.25);background:#9ca3af;background-size:cover;background-position:center;";
+  if (thumbUrl) top.style.backgroundImage = `url("${thumbUrl}")`;
+  el.appendChild(top);
+  if (count > 1) {
+    const badge = document.createElement("div");
+    badge.style.cssText = "position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2563eb;color:#fff;font-weight:700;font-size:12px;line-height:22px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.3);";
+    badge.textContent = String(count);
+    el.appendChild(badge);
+  }
+  document.body.appendChild(el);
+  return el;
+}
+
 /** Photo grid with large thumbnails, drag-to-reorder, select mode, and delete */
 function PhotoGrid({
   photos,
@@ -411,7 +437,14 @@ function PhotoGrid({
   onFileDrop,
   selectMode,
   selectedIndices,
-  onToggleSelect,
+  onSelectClick,
+  onGroupDragStart,
+  onGroupDragOver,
+  onGroupDrop,
+  onGroupDragEnd,
+  onKeyboardMove,
+  groupDragging,
+  dropGapIdx,
 }: {
   photos: Array<{ url: string; caption?: string; sortOrder: number }>;
   setPhotos: React.Dispatch<React.SetStateAction<Array<{ url: string; caption?: string; sortOrder: number }>>>;
@@ -431,7 +464,14 @@ function PhotoGrid({
   onFileDrop: (files: File[]) => Promise<void>;
   selectMode: boolean;
   selectedIndices: Set<number>;
-  onToggleSelect: (idx: number) => void;
+  onSelectClick: (idx: number, e: React.MouseEvent | React.KeyboardEvent) => void;
+  onGroupDragStart: (e: React.DragEvent, idx: number) => void;
+  onGroupDragOver: (e: React.DragEvent, idx: number) => void;
+  onGroupDrop: (e: React.DragEvent) => void;
+  onGroupDragEnd: () => void;
+  onKeyboardMove: (dir: -1 | 1) => void;
+  groupDragging: boolean;
+  dropGapIdx: number | null;
 }) {
   return (
     <>
@@ -443,24 +483,41 @@ function PhotoGrid({
       >
         {photos.map((photo, i) => {
           const isSelected = selectedIndices.has(i);
+          const showDropBefore = selectMode && dropGapIdx === i;
+          const showDropAfter = selectMode && i === photos.length - 1 && dropGapIdx === photos.length;
           return (
             <div
               key={`photo-${i}`}
               data-photo-idx={i}
-              draggable={!selectMode}
-              onDragStart={selectMode ? undefined : (e) => onDragStart(e, i)}
-              onDragOver={selectMode ? undefined : (e) => onDragOver(e, i)}
-              onDrop={selectMode ? undefined : (e) => onDrop(e, i)}
-              onDragEnd={selectMode ? undefined : onDragEnd}
-              onClick={selectMode ? () => onToggleSelect(i) : undefined}
+              draggable
+              onDragStart={selectMode ? (e) => onGroupDragStart(e, i) : (e) => onDragStart(e, i)}
+              onDragOver={selectMode ? (e) => onGroupDragOver(e, i) : (e) => onDragOver(e, i)}
+              onDrop={selectMode ? (e) => onGroupDrop(e) : (e) => onDrop(e, i)}
+              onDragEnd={selectMode ? onGroupDragEnd : onDragEnd}
+              onClick={selectMode ? (e) => onSelectClick(i, e) : undefined}
+              onKeyDown={selectMode ? (e) => {
+                if (e.key === " " || e.key === "Enter") { e.preventDefault(); onSelectClick(i, e); }
+                else if ((e.metaKey || e.ctrlKey) && e.key === "ArrowLeft") { e.preventDefault(); onKeyboardMove(-1); }
+                else if ((e.metaKey || e.ctrlKey) && e.key === "ArrowRight") { e.preventDefault(); onKeyboardMove(1); }
+              } : undefined}
+              tabIndex={selectMode ? 0 : undefined}
+              role={selectMode ? "button" : undefined}
+              aria-pressed={selectMode ? isSelected : undefined}
               className={cn(
-                "relative aspect-square bg-muted rounded-lg overflow-hidden group transition-all",
-                selectMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
+                "relative aspect-square bg-muted rounded-lg overflow-hidden group transition-all cursor-grab active:cursor-grabbing",
                 !selectMode && photoDragIdx === i && "opacity-40 scale-95 ring-2 ring-primary/40",
                 !selectMode && photoOverIdx === i && photoDragIdx !== i && "ring-2 ring-primary/60 scale-105",
                 selectMode && isSelected && "ring-3 ring-blue-500 ring-offset-1",
+                selectMode && groupDragging && isSelected && "opacity-40",
+                selectMode && "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400",
               )}
             >
+              {showDropBefore && (
+                <div className="absolute left-0 top-0.5 bottom-0.5 w-1 bg-blue-600 rounded-full z-20 pointer-events-none" />
+              )}
+              {showDropAfter && (
+                <div className="absolute right-0 top-0.5 bottom-0.5 w-1 bg-blue-600 rounded-full z-20 pointer-events-none" />
+              )}
               {photo.url ? (
                 <img src={photo.url} alt="" className="w-full h-full object-cover" />
               ) : (
@@ -688,6 +745,13 @@ export function NodeEditor({
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [movingPhotos, setMovingPhotos] = useState(false);
 
+  /* ── Multi-select drag-reorder state ── */
+  const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null);
+  const [groupDragging, setGroupDragging] = useState(false);
+  const [dropGapIdx, setDropGapIdx] = useState<number | null>(null);
+  const groupDragSetRef = useRef<Set<number>>(new Set());
+  const dragGhostRef = useRef<HTMLElement | null>(null);
+
   const reorderPhotos = (from: number, to: number) => {
     if (from === to) return;
     const next = [...photos];
@@ -748,12 +812,116 @@ export function NodeEditor({
     setPhotoOverIdx(null);
   };
 
-  const togglePhotoSelect = (idx: number) => {
-    setSelectedPhotoIndices((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
+  const selectPhoto = (idx: number, shiftKey: boolean) => {
+    if (shiftKey && lastSelectedIdx !== null) {
+      const lo = Math.min(idx, lastSelectedIdx);
+      const hi = Math.max(idx, lastSelectedIdx);
+      setSelectedPhotoIndices((prev) => {
+        const next = new Set(prev);
+        for (let i = lo; i <= hi; i++) next.add(i);
+        return next;
+      });
+    } else {
+      setSelectedPhotoIndices((prev) => {
+        const next = new Set(prev);
+        if (next.has(idx)) next.delete(idx);
+        else next.add(idx);
+        return next;
+      });
+    }
+    setLastSelectedIdx(idx);
+  };
+
+  /* ── Multi-photo group reorder (drag or keyboard) ──
+     gapIdx is an insertion point in the current array (0..photos.length); the selected
+     group is lifted out and re-inserted so it keeps its relative order, and the
+     non-selected photos close up around it. */
+  const computeGroupReorder = (dragSet: Set<number>, gapIdx: number) => {
+    const group = photos.filter((_, i) => dragSet.has(i));
+    const remaining = photos.filter((_, i) => !dragSet.has(i));
+    let insertPos = 0;
+    for (let i = 0; i < gapIdx; i++) if (!dragSet.has(i)) insertPos++;
+    const next = [...remaining.slice(0, insertPos), ...group, ...remaining.slice(insertPos)];
+    next.forEach((p, i) => (p.sortOrder = i));
+    return { next, insertPos, groupLen: group.length };
+  };
+
+  const cleanupGroupDrag = () => {
+    setGroupDragging(false);
+    setDropGapIdx(null);
+    groupDragSetRef.current = new Set();
+    if (dragGhostRef.current) { dragGhostRef.current.remove(); dragGhostRef.current = null; }
+  };
+
+  const handleGroupDragStart = (e: React.DragEvent, idx: number) => {
+    // Dragging a selected photo drags the whole selection; dragging an unselected
+    // one selects just it and drags that.
+    let dragSet: Set<number>;
+    if (selectedPhotoIndices.has(idx)) {
+      dragSet = new Set(selectedPhotoIndices);
+    } else {
+      dragSet = new Set([idx]);
+      setSelectedPhotoIndices(dragSet);
+      setLastSelectedIdx(idx);
+    }
+    groupDragSetRef.current = dragSet;
+    setGroupDragging(true);
+    e.dataTransfer.effectAllowed = "move";
+    const ghost = createGroupDragGhost(dragSet.size, photos[idx]?.url);
+    if (ghost) {
+      dragGhostRef.current = ghost;
+      e.dataTransfer.setDragImage(ghost, 24, 24);
+    }
+  };
+
+  const handleGroupDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const rect = e.currentTarget.getBoundingClientRect();
+    const after = e.clientX - rect.left > rect.width / 2;
+    setDropGapIdx(after ? idx + 1 : idx);
+  };
+
+  const handleGroupDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const dragSet = groupDragSetRef.current;
+    if (dragSet.size > 0 && dropGapIdx !== null) {
+      const { next } = computeGroupReorder(dragSet, dropGapIdx);
+      setPhotos(next);
+      setSelectedPhotoIndices(new Set());
+      setLastSelectedIdx(null);
+      void autoSave({ photos: next.length > 0 ? next : null });
+    }
+    cleanupGroupDrag();
+  };
+
+  // Dropped outside a valid target → snap back (no reorder), keep the selection.
+  const handleGroupDragEnd = () => {
+    cleanupGroupDrag();
+  };
+
+  const moveSelectionByKeyboard = (dir: -1 | 1) => {
+    if (selectedPhotoIndices.size === 0) return;
+    const sorted = Array.from(selectedPhotoIndices).sort((a, b) => a - b);
+    const minSel = sorted[0];
+    const maxSel = sorted[sorted.length - 1];
+    let gapIdx: number;
+    if (dir === -1) {
+      if (minSel <= 0) return;
+      gapIdx = minSel - 1;
+    } else {
+      if (maxSel >= photos.length - 1) return;
+      gapIdx = maxSel + 2;
+    }
+    const { next, insertPos, groupLen } = computeGroupReorder(selectedPhotoIndices, gapIdx);
+    setPhotos(next);
+    const newSel = new Set<number>();
+    for (let i = 0; i < groupLen; i++) newSel.add(insertPos + i);
+    setSelectedPhotoIndices(newSel);
+    setLastSelectedIdx(insertPos);
+    void autoSave({ photos: next.length > 0 ? next : null });
+    requestAnimationFrame(() => {
+      photoListRef.current?.querySelector<HTMLElement>(`[data-photo-idx="${insertPos}"]`)?.focus();
     });
   };
 
@@ -768,6 +936,7 @@ export function NodeEditor({
   const exitSelectMode = () => {
     setPhotoSelectMode(false);
     setSelectedPhotoIndices(new Set());
+    setLastSelectedIdx(null);
   };
 
   const handleMovePhotos = async (destinationNodeId: string) => {
@@ -883,6 +1052,20 @@ export function NodeEditor({
     };
   }, [node.type]);
 
+  // In select mode, clicking outside the photo section clears the selection.
+  // Skipped while the move dialog is open so it can still read the selection.
+  useEffect(() => {
+    if (!photoSelectMode || moveDialogOpen) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest("[data-photo-section]")) return;
+      setSelectedPhotoIndices(new Set());
+      setLastSelectedIdx(null);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [photoSelectMode, moveDialogOpen]);
+
   const [prevNodeId, setPrevNodeId] = useState(node.id);
   if (node.id !== prevNodeId) {
     setPrevNodeId(node.id);
@@ -912,6 +1095,7 @@ export function NodeEditor({
     setTranscriptionOpen(false);
     setPhotoSelectMode(false);
     setSelectedPhotoIndices(new Set());
+    setLastSelectedIdx(null);
   }
 
   /* ── Build metadata payload (with optional overrides) ── */
@@ -1230,6 +1414,71 @@ export function NodeEditor({
   const parentNode = node.parentId ? allNodes.find((n) => n.id === node.parentId) : null;
   const gradient = TYPE_GRADIENT[node.type] || "from-indigo-500 to-violet-500";
   const headerBg = TYPE_HEADER_BG[node.type] || "bg-gradient-to-r from-indigo-50 to-violet-50";
+
+  /* ── Photos section (shared by photo_album, folder, and settings) ── */
+  const photoSection = (
+    <div data-photo-section>
+      <div className="flex items-center justify-between mb-3">
+        <SectionHeader>Photos</SectionHeader>
+        {photos.length > 0 && (
+          <Button
+            size="sm"
+            variant={photoSelectMode ? "default" : "outline"}
+            className="h-7 text-xs gap-1.5"
+            onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
+          >
+            {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
+          </Button>
+        )}
+      </div>
+      {photoSelectMode && (
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
+          <span className="text-xs text-muted-foreground ml-auto">
+            {selectedPhotoIndices.size > 0
+              ? `${selectedPhotoIndices.size} selected · drag or ⌘←/→ to reorder`
+              : "Click to select · shift-click for a range"}
+          </span>
+          {selectedPhotoIndices.size > 0 && (
+            <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
+              <ArrowRightLeft className="h-3 w-3" /> Move to Album
+            </Button>
+          )}
+        </div>
+      )}
+      <FieldGroup className="p-0 overflow-hidden space-y-0">
+        <PhotoGrid
+          photos={photos}
+          setPhotos={setPhotos}
+          photoListRef={photoListRef}
+          photoDragIdx={photoDragIdx}
+          photoOverIdx={photoOverIdx}
+          onDragStart={handlePhotoDragStart}
+          onDragOver={handlePhotoDragOver}
+          onDrop={handlePhotoDrop}
+          onDragEnd={handlePhotoDragEnd}
+          onTouchMove={handlePhotoTouchMove}
+          onTouchEnd={handlePhotoTouchEnd}
+          onGripTouchStart={handlePhotoGripTouchStart}
+          uploadingPhotos={uploadingPhotos}
+          uploadProgress={uploadProgress}
+          isDraggingOver={isDraggingOver}
+          onFileDrop={handleFileDrop}
+          selectMode={photoSelectMode}
+          selectedIndices={selectedPhotoIndices}
+          onSelectClick={(idx, e) => selectPhoto(idx, e.shiftKey)}
+          onGroupDragStart={handleGroupDragStart}
+          onGroupDragOver={handleGroupDragOver}
+          onGroupDrop={handleGroupDrop}
+          onGroupDragEnd={handleGroupDragEnd}
+          onKeyboardMove={moveSelectionByKeyboard}
+          groupDragging={groupDragging}
+          dropGapIdx={dropGapIdx}
+        />
+      </FieldGroup>
+    </div>
+  );
 
   return (
     <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden w-full max-w-full">
@@ -1581,56 +1830,7 @@ export function NodeEditor({
               {/* ── SETTINGS ── */}
               {node.type === "settings" && (
                 <>
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <SectionHeader>Photos</SectionHeader>
-                      {photos.length > 0 && (
-                        <Button
-                          size="sm"
-                          variant={photoSelectMode ? "default" : "outline"}
-                          className="h-7 text-xs gap-1.5"
-                          onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
-                        >
-                          {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
-                        </Button>
-                      )}
-                    </div>
-                    {photoSelectMode && (
-                      <div className="flex items-center gap-2 mb-2">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
-                        <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
-                        {selectedPhotoIndices.size > 0 && (
-                          <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
-                            <ArrowRightLeft className="h-3 w-3" /> Move to Album
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                    <FieldGroup className="p-0 overflow-hidden space-y-0">
-                      <PhotoGrid
-                        photos={photos}
-                        setPhotos={setPhotos}
-                        photoListRef={photoListRef}
-                        photoDragIdx={photoDragIdx}
-                        photoOverIdx={photoOverIdx}
-                        onDragStart={handlePhotoDragStart}
-                        onDragOver={handlePhotoDragOver}
-                        onDrop={handlePhotoDrop}
-                        onDragEnd={handlePhotoDragEnd}
-                        onTouchMove={handlePhotoTouchMove}
-                        onTouchEnd={handlePhotoTouchEnd}
-                        onGripTouchStart={handlePhotoGripTouchStart}
-                        uploadingPhotos={uploadingPhotos}
-                        uploadProgress={uploadProgress}
-                        isDraggingOver={isDraggingOver}
-                        onFileDrop={handleFileDrop}
-                        selectMode={photoSelectMode}
-                        selectedIndices={selectedPhotoIndices}
-                        onToggleSelect={togglePhotoSelect}
-                      />
-                    </FieldGroup>
-                  </div>
+                  {photoSection}
                   <ChildrenList
                     parentId={node.id}
                     children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
@@ -1670,56 +1870,7 @@ export function NodeEditor({
                           </FieldGroup>
                         </div>
                       </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <SectionHeader>Photos</SectionHeader>
-                          {photos.length > 0 && (
-                            <Button
-                              size="sm"
-                              variant={photoSelectMode ? "default" : "outline"}
-                              className="h-7 text-xs gap-1.5"
-                              onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
-                            >
-                              {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
-                            </Button>
-                          )}
-                        </div>
-                        {photoSelectMode && (
-                          <div className="flex items-center gap-2 mb-2">
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
-                            <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
-                            {selectedPhotoIndices.size > 0 && (
-                              <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
-                                <ArrowRightLeft className="h-3 w-3" /> Move to Album
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                        <FieldGroup className="p-0 overflow-hidden space-y-0">
-                          <PhotoGrid
-                            photos={photos}
-                            setPhotos={setPhotos}
-                            photoListRef={photoListRef}
-                            photoDragIdx={photoDragIdx}
-                            photoOverIdx={photoOverIdx}
-                            onDragStart={handlePhotoDragStart}
-                            onDragOver={handlePhotoDragOver}
-                            onDrop={handlePhotoDrop}
-                            onDragEnd={handlePhotoDragEnd}
-                            onTouchMove={handlePhotoTouchMove}
-                            onTouchEnd={handlePhotoTouchEnd}
-                            onGripTouchStart={handlePhotoGripTouchStart}
-                            uploadingPhotos={uploadingPhotos}
-                            uploadProgress={uploadProgress}
-                            isDraggingOver={isDraggingOver}
-                            onFileDrop={handleFileDrop}
-                            selectMode={photoSelectMode}
-                            selectedIndices={selectedPhotoIndices}
-                            onToggleSelect={togglePhotoSelect}
-                          />
-                        </FieldGroup>
-                      </div>
+                      {photoSection}
                       <ChildrenList
                         parentId={node.id}
                         children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
@@ -1735,56 +1886,7 @@ export function NodeEditor({
               {/* ── PHOTO ALBUM ── */}
               {node.type === "photo_album" && (
                 <>
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <SectionHeader>Photos</SectionHeader>
-                      {photos.length > 0 && (
-                        <Button
-                          size="sm"
-                          variant={photoSelectMode ? "default" : "outline"}
-                          className="h-7 text-xs gap-1.5"
-                          onClick={() => photoSelectMode ? exitSelectMode() : setPhotoSelectMode(true)}
-                        >
-                          {photoSelectMode ? <><X className="h-3 w-3" /> Cancel</> : <><CheckSquare className="h-3 w-3" /> Select</>}
-                        </Button>
-                      )}
-                    </div>
-                    {photoSelectMode && (
-                      <div className="flex items-center gap-2 mb-2">
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleSelectAll}>Select All</Button>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleDeselectAll}>Deselect All</Button>
-                        <span className="text-xs text-muted-foreground ml-auto">{selectedPhotoIndices.size} selected</span>
-                        {selectedPhotoIndices.size > 0 && (
-                          <Button size="sm" className="h-7 text-xs gap-1.5 bg-blue-600 hover:bg-blue-700" onClick={() => setMoveDialogOpen(true)}>
-                            <ArrowRightLeft className="h-3 w-3" /> Move to Album
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                    <FieldGroup className="p-0 overflow-hidden space-y-0">
-                      <PhotoGrid
-                        photos={photos}
-                        setPhotos={setPhotos}
-                        photoListRef={photoListRef}
-                        photoDragIdx={photoDragIdx}
-                        photoOverIdx={photoOverIdx}
-                        onDragStart={handlePhotoDragStart}
-                        onDragOver={handlePhotoDragOver}
-                        onDrop={handlePhotoDrop}
-                        onDragEnd={handlePhotoDragEnd}
-                        onTouchMove={handlePhotoTouchMove}
-                        onTouchEnd={handlePhotoTouchEnd}
-                        onGripTouchStart={handlePhotoGripTouchStart}
-                        uploadingPhotos={uploadingPhotos}
-                        uploadProgress={uploadProgress}
-                        isDraggingOver={isDraggingOver}
-                        onFileDrop={handleFileDrop}
-                        selectMode={photoSelectMode}
-                        selectedIndices={selectedPhotoIndices}
-                        onToggleSelect={togglePhotoSelect}
-                      />
-                    </FieldGroup>
-                  </div>
+                  {photoSection}
                   <ChildrenList
                     parentId={node.id}
                     children={allNodes.filter((n) => n.parentId === node.id).sort((a, b) => a.sortOrder - b.sortOrder)}
